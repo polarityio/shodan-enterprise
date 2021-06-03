@@ -19,7 +19,6 @@ const createRequestWithDefaults = (Logger) => {
     ...(_configFieldIsValid(passphrase) && { passphrase }),
     ...(_configFieldIsValid(proxy) && { proxy }),
     ...(typeof rejectUnauthorized === 'boolean' && { rejectUnauthorized }),
-    json: true
   };
 
   const requestWithDefaults = (
@@ -80,7 +79,7 @@ const createRequestWithDefaults = (Logger) => {
 
   const requestDefaultsWithInterceptors = requestWithDefaults();
 
-  return requestDefaultsWithInterceptors;
+  return { requestWithDefaults: requestDefaultsWithInterceptors, requestDefaults: defaults };
 };
 
 module.exports = createRequestWithDefaults;

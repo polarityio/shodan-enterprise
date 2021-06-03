@@ -1,6 +1,7 @@
 # Polarity Shodan Enterprise Integration
 
 TODO
+"Minified database containing network information about all IPs on the Internet"
 
 To learn more about H-ISAC, please visit the [official website](https://h-isac.org/).
 
@@ -9,10 +10,10 @@ To learn more about H-ISAC, please visit the [official website](https://h-isac.o
   <img width="370" alt="Integration Example" src="./assets/integration.png">
 </div>
 
-## ThreatQuotient Integration Options
+## Shodan Enterprise Integration Options
 ### TODO URL
 
-
+<!-- TODO: Write section about custom config.js properties -->
 
 ## Installation Instructions
 
