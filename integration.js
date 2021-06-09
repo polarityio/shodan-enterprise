@@ -1,6 +1,5 @@
 const fp = require('lodash/fp');
 
-const reduce = require('lodash/fp/reduce').convert({ cap: false });
 const createRequestWithDefaults = require('./src/createRequestWithDefaults');
 const schedule = require('node-schedule');
 const config = require('./config/config');
@@ -24,58 +23,54 @@ const setKnex = (value) => {
 
 const startup = async (logger) => {
   Logger = logger;
+  
+  try {
+    const { requestWithDefaults: _requestWithDefaults, requestDefaults } =
+      createRequestWithDefaults(Logger);
 
-  // return async (cb) => {
-  //   try {
-      const { requestWithDefaults: _requestWithDefaults, requestDefaults } =
-        createRequestWithDefaults(Logger);
+    requestWithDefaults = _requestWithDefaults;
 
-      requestWithDefaults = _requestWithDefaults;
+    if (job) job.cancel();
+    
+    await refreshInternetDb(
+      knex,
+      setKnex,
+      setDataIsLoadedIn,
+      requestDefaults,
+      requestWithDefaults,
+      Logger
+    )();
 
-      if (job) job.cancel();
+    const shodanDataRefreshTime = fp.get('shodanDataRefreshTime', config);
 
-      await refreshInternetDb(
+    job = schedule.scheduleJob(
+      shodanDataRefreshTime,
+      refreshInternetDb(
         knex,
         setKnex,
         setDataIsLoadedIn,
         requestDefaults,
         requestWithDefaults,
         Logger
-      )();
-
-      const shodanDataRefreshTime = fp.get('shodanDataRefreshTime', config);
-
-      job = schedule.scheduleJob(
-        shodanDataRefreshTime,
-        refreshInternetDb(
-          knex,
-          setKnex,
-          setDataIsLoadedIn,
-          requestDefaults,
-          requestWithDefaults,
-          Logger
-        )
-      );
-  //   } catch (error) {
-  //     Logger.error(error, 'Error in startup function');
-  //     cb(error);
-  //   }
-
-  //   cb(null);
-  // };
+      )
+    );
+  } catch (error) {
+    Logger.error(error, 'Error in startup function');
+    throw error;
+  }
 };
 
 const doLookup = async (entities, options, cb) => {
   let lookupResults;
   try {
-    const asdf = knex && (await knex('data').select('*').limit(3));
-    Logger.trace({ test: 3333333, dataIsLoadedIn, asdf, knex });
-    lookupResults = []; //await getLookupResults(entities, Logger);
+    lookupResults = await getLookupResults(entities, dataIsLoadedIn, knex, Logger);
   } catch (error) {
     Logger.error(error, 'Get Lookup Results Failed');
     return cb({
-      err: 'Search Failed',
-      detail: JSON.parse(JSON.stringify(error, Object.getOwnPropertyNames(error)))
+      detail: error.message.includes('Knex: Timeout')
+        ? 'Too Many Entities Searched at Once'
+        : 'Search Failed',
+      err: JSON.parse(JSON.stringify(error, Object.getOwnPropertyNames(error)))
     });
   }
 

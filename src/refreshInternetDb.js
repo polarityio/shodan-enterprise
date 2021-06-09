@@ -8,6 +8,7 @@ const exec = util.promisify(require('child_process').exec);
 const COMPRESSED_DB_FILEPATH = './data/new-internetdb.sqlite.bz2';
 const FINAL_DB_DECOMPRESSION_FILEPATH = './data/internetdb.sqlite';
 const TEMP_DB_DECOMPRESSION_FILEPATH = './data/new-internetdb.sqlite';
+const LOCAL_STORAGE_FILEPATH = './data/local-storage.json';
 
 const refreshInternetDb =
   (
@@ -23,12 +24,15 @@ const refreshInternetDb =
 
     const startTime = new Date();
 
-    let shodanEnterpriseApiKey = fp.get('shodanEnterpriseApiKey', config) || process.env.SHODAN_ENTERPRISE_API_KEY;
-    const lessStorageMoreDowntime = fp.get('lessStorageMoreDowntime', config);
-
+    const shodanEnterpriseApiKey =
+      fp.get('shodanEnterpriseApiKey', config) || process.env.SHODAN_ENTERPRISE_API_KEY;
+      
     if (!shodanEnterpriseApiKey) {
       throw new Error('Shodan Enterprise API Key not set in config.js');
     }
+
+    const lessStorageMoreDowntime = fp.get('lessStorageMoreDowntime', config);
+
 
     const databaseFileExists = fs.existsSync(FINAL_DB_DECOMPRESSION_FILEPATH);
 
@@ -38,7 +42,7 @@ const refreshInternetDb =
       Logger
     );
 
-    if (linkIsNew(downloadLink, databaseFileExists)) {
+    if (shouldDownloadAndDecompress(downloadLink, databaseFileExists)) {
       Logger.info(
         'Downloading and Decompressing Entire Database. This could take a few minutes.'
       );
@@ -65,8 +69,7 @@ const refreshInternetDb =
     );
 
     const endTime = new Date();
-
-    const loadTime = millisToHoursMinutesAndSeconds(startTime - endTime);
+    const loadTime = millisToHoursMinutesAndSeconds(endTime - startTime, Logger);
 
     Logger.info(`Refreshing Database Complete. Load Time: ${loadTime}`);
   };
@@ -91,23 +94,36 @@ const getDownloadLink = async (apiKey, requestWithDefaults, Logger) => {
   return downloadLink;
 };
 
-const linkIsNew = (downloadLink, databaseFileExists) => {
-  const oldDownloadPath = './data/oldDownloadLink';
-  const oldDownloadLink = fs.existsSync(oldDownloadPath)
-    ? fs.readFileSync(oldDownloadPath, 'utf8')
-    : '';
+const shouldDownloadAndDecompress = (downloadLink, databaseFileExists) => {
+  const oldDownloadLink = getLocalStorageProperty('oldDownloadLink');
 
-  if (downloadLink === oldDownloadLink && databaseFileExists) return false;
-
-  fs.writeFileSync(oldDownloadPath, downloadLink);
-  return true;
+  const downloadLinkHasntChanged = downloadLink === oldDownloadLink;
+  const databaseHasSize = !!getFileSizeInGB(FINAL_DB_DECOMPRESSION_FILEPATH);
+  
+  return !(
+    downloadLinkHasntChanged &&
+    databaseFileExists &&
+    databaseHasSize
+  );
 };
 
 const downloadFile = async (downloadLink, requestDefaults, Logger) => {
   try {
     Logger.trace('Starting Compressed Database Download');
+    const oldDownloadLink = getLocalStorageProperty('oldDownloadLink');
 
-    if (fs.existsSync(COMPRESSED_DB_FILEPATH))
+    const compressedDatabaseExists = fs.existsSync(COMPRESSED_DB_FILEPATH);
+
+    if (downloadLink === oldDownloadLink && compressedDatabaseExists) {
+      Logger.trace(
+        'Compressed Database File Exists and is up to date.  Skipping Compressed Database Download.'
+      );
+      return;
+    }
+
+    setLocalStorageProperty('oldDownloadLink', downloadLink);
+
+    if (compressedDatabaseExists)
       fs.unlinkSync(COMPRESSED_DB_FILEPATH);
 
     const file = fs.createWriteStream(COMPRESSED_DB_FILEPATH);
@@ -119,11 +135,10 @@ const downloadFile = async (downloadLink, requestDefaults, Logger) => {
         .on('error', reject)
     );
 
-    const compressedDatabaseFileSize =
-      fs.statSync(COMPRESSED_DB_FILEPATH).size / (1024 * 1024);
+    const compressedDatabaseFileSize = getFileSizeInGB(COMPRESSED_DB_FILEPATH);
 
     Logger.info(
-      `Compressed Database Download Complete. File Size: ${compressedDatabaseFileSize}MB`
+      `Compressed Database Download Complete. File Size: ${compressedDatabaseFileSize}GB`
     );
   } catch (error) {
     Logger.error(error, 'Error when Downloading Compressed Database File');
@@ -142,19 +157,20 @@ const decompressDatabase = async (
   try {
     Logger.trace('Starting Database Decompression');
 
-    let decompressionFilePath = lessStorageMoreDowntime
-      ? TEMP_DB_DECOMPRESSION_FILEPATH
-      : FINAL_DB_DECOMPRESSION_FILEPATH;
+    let decompressionFilePath = TEMP_DB_DECOMPRESSION_FILEPATH;
 
     if (lessStorageMoreDowntime) {
       Logger.info(
         'Deleting Current Database before Decompression. Searching will be disabled during this time.'
       );
 
+      decompressionFilePath = FINAL_DB_DECOMPRESSION_FILEPATH;
+
       if (knex && knex.destroy) {
         setDataIsLoadedIn(false);
         await knex.destroy();
       }
+
       if (databaseFileExists) fs.unlinkSync(FINAL_DB_DECOMPRESSION_FILEPATH);
 
       setKnex(undefined);
@@ -164,19 +180,27 @@ const decompressDatabase = async (
       `bzip2 -dc1 ${COMPRESSED_DB_FILEPATH} > ${decompressionFilePath}`
     );
 
+    if (fs.existsSync(COMPRESSED_DB_FILEPATH)) {
+      fs.unlinkSync(COMPRESSED_DB_FILEPATH);
+    }
+
     if (stderr) {
       throw new Error(`Database Decompression Failed -> ${stderr}`);
     }
 
-    const databaseFileSize = fs.statSync(decompressionFilePath).size / (1024 * 1024);
+    const databaseFileSize = getFileSizeInGB(decompressionFilePath);
 
     Logger.info(
-      `Database Decompression Complete. Database File Size: ${databaseFileSize}MB`,
-      { databaseDecompressionMessage }
+      databaseDecompressionMessage ? { databaseDecompressionMessage } : '',
+      `Database Decompression Complete. Database File Size Before Indexing: ${databaseFileSize}GB`
     );
-
   } catch (error) {
     Logger.error(error, 'Error when Decompressing Database File');
+    if (error.message.includes('bzip2: command not found')) {
+      throw new Error(
+        "Must run 'npm run build' on your server then restart the integration before using this integration is possible."
+      );
+    }
     throw error;
   }
 };
@@ -189,62 +213,88 @@ const readInFileToKnex = async (
   lessStorageMoreDowntime,
   Logger
 ) => {
-  if (!lessStorageMoreDowntime){
+  Logger.trace('Started Loading in Database');
+
+  if (!lessStorageMoreDowntime) {
     Logger.info(
       `Deleting Old Database after Database Decompression. Searching will be disabled for a moment.`
     );
 
-    if (knex && knex.destroy) {
-      setDataIsLoadedIn(false);
-      await knex.destroy();
-    }
+    const newDatabaseFileExists = fs.existsSync(TEMP_DB_DECOMPRESSION_FILEPATH);
 
-    const newdatabaseFileExists = fs.existsSync(TEMP_DB_DECOMPRESSION_FILEPATH);
+    if (databaseFileExists && newDatabaseFileExists)
+      fs.unlinkSync(FINAL_DB_DECOMPRESSION_FILEPATH);
 
-    if (databaseFileExists && newdatabaseFileExists) fs.unlinkSync(FINAL_DB_DECOMPRESSION_FILEPATH);
-
-    if (newdatabaseFileExists)
+    if (newDatabaseFileExists)
       fs.renameSync(TEMP_DB_DECOMPRESSION_FILEPATH, FINAL_DB_DECOMPRESSION_FILEPATH);
   }
 
-  const numberOfDatabaseRecords = await new Promise((resolve, reject) =>
-    setKnex(
-      require('knex')({
-        client: 'sqlite3',
-        connection: {
-          filename: FINAL_DB_DECOMPRESSION_FILEPATH
-        },
-        pool: {
-          afterCreate: async (conn, cb) => {
-            try {
-              const { count } = await conn('data').count('id').first();
+  if (knex && knex.destroy) {
+    setDataIsLoadedIn(false);
+    await knex.destroy();
+  }
 
-              cb(null, conn);
+  const _knex = await require('knex')({
+    client: 'sqlite3',
+    connection: {
+      filename: FINAL_DB_DECOMPRESSION_FILEPATH
+    }
+  });
 
-              resolve(count);
-            } catch (error) {
-              Logger.error(error, 'Failed to Load Database')
-              reject(error);
-            }
-          }
-        }
-      })
-    )
-  );
+  const enableDomainAndCveSearching = fp.get('enableDomainAndCveSearching', config);
+  const settingChanged =
+    enableDomainAndCveSearching !==
+    getLocalStorageProperty('previousEnableDomainAndCveSearching');
+
+  if (settingChanged) {
+    Logger.info('Running Indexing of Database for faster searching.');
+    await _knex.raw('DROP INDEX IF EXISTS data_ip_idx;');
+    await _knex.raw('DROP TABLE IF EXISTS data_fts;');
+
+    if (enableDomainAndCveSearching) {
+      await _knex.raw('CREATE VIRTUAL TABLE data_fts USING fts4(ip TEXT, ports TEXT, tags TEXT, cpes TEXT, vulns TEXT, hostnames TEXT);');
+      await _knex.raw('INSERT INTO data_fts SELECT ip, ports, tags, cpes, vulns, hostnames FROM data;');
+    } else {
+      await _knex.raw('CREATE UNIQUE INDEX data_ip_idx ON data(ip);');
+    }
+    getLocalStorageProperty(
+      'previousEnableDomainAndCveSearching',
+      enableDomainAndCveSearching
+    );
+  }
   
-  setDataIsLoadedIn(true);
+  let numberOfDatabaseRecords;
+  if (fp.get('showNumberOfDatabaseRecords', config)) {
+    const { 'count(`ip`)': count } = await _knex('data').count('ip').first();
+    numberOfDatabaseRecords = count;
+  }
 
-  Logger.info(`Loaded in Database and Searching is now Enabled. ${numberOfDatabaseRecords} Records Found.`);
+  setKnex(_knex);
+
+  setDataIsLoadedIn(true);
+  
+  const databaseFileSize = getFileSizeInGB(FINAL_DB_DECOMPRESSION_FILEPATH);
+
+  Logger.info(
+    'Loaded in Database. Searching is now Enabled.' +
+      (databaseFileSize ? ` Database File Size After Indexing ${databaseFileSize}GB` : '') +
+      (numberOfDatabaseRecords ? ` ${numberOfDatabaseRecords} Records Found.` : '')
+  );
 };
 
-const millisToHoursMinutesAndSeconds = (millis) => {
-  let remainingMillis = millis; 
+const getFileSizeInGB = (filepath) =>
+  Math.floor((fs.statSync(filepath).size / 1073741824) * 1000) / 1000;
+
+
+const millisToHoursMinutesAndSeconds = (millis, Logger) => {
+  let remainingMillis = millis;
+
   const seconds = Math.floor((remainingMillis / 1000) % 60);
-  remainingMillis -= seconds * 1000;
+  remainingMillis -= seconds * 1000;  
 
   const minutes = Math.floor((remainingMillis / 60000) % 60);
   remainingMillis -= minutes * 60000;
-    
+
   const hours = Math.floor(remainingMillis / 3600000);
 
   return `${
@@ -253,7 +303,29 @@ const millisToHoursMinutesAndSeconds = (millis) => {
     minutes ? `${minutes} minutes, ` : ''
   }${
     seconds ? `${seconds} seconds` : ''
+  }${
+    !hours && !minutes && !seconds ? `${millis}ms` : ''
   }`;
+};
+
+const getLocalStorageProperty = (propertyName) => {
+  const localStorage = fs.existsSync(LOCAL_STORAGE_FILEPATH)
+    ? JSON.parse(fs.readFileSync(LOCAL_STORAGE_FILEPATH, 'utf8'))
+    : {};
+
+  return localStorage[propertyName];
+};
+
+const setLocalStorageProperty = (propertyName, newValue) => {
+  const localStorage = fs.existsSync(LOCAL_STORAGE_FILEPATH)
+    ? JSON.parse(fs.readFileSync(LOCAL_STORAGE_FILEPATH, 'utf8'))
+    : {};
+
+  localStorage[propertyName] = newValue;
+
+  fs.writeFileSync(LOCAL_STORAGE_FILEPATH, JSON.stringify(localStorage));
+
+  return localStorage;
 };
 
 module.exports = refreshInternetDb;
