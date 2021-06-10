@@ -36,7 +36,7 @@ module.exports = {
    */
   shodanEnterpriseApiKey: '',
   /**
-   * Enable Domain And CVE Searching: 
+   * Enable Domain And CVE Searching:
    *  Enabling Domain and CVE Searching will double the data storage
    *  requirements for the database and increase the downtime for the database refresh load
    *  time substantially, and noticeably slow down your searching as well.

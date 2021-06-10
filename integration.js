@@ -2,60 +2,38 @@ const fp = require('lodash/fp');
 
 const createRequestWithDefaults = require('./src/createRequestWithDefaults');
 const schedule = require('node-schedule');
-const config = require('./config/config');
+const { shodanDataRefreshTime } = require('./config/config');
 
 const { getLookupResults } = require('./src/getLookupResults');
-const refreshInternetDb = require('./src/refreshInternetDb');
+const refreshInternetDb = require('./src/refreshInternetDb/index');
 
 let Logger;
-let requestWithDefaults;
 let job;
 let knex;
 let dataIsLoadedIn;
 
-const setDataIsLoadedIn = (value) => {
-  dataIsLoadedIn = value;
-};
 
 const setKnex = (value) => {
   knex = value;
+  dataIsLoadedIn = !!value;
 };
 
 const startup = async (logger) => {
   Logger = logger;
   
   try {
-    const { requestWithDefaults: _requestWithDefaults, requestDefaults } =
-      createRequestWithDefaults(Logger);
-
-    requestWithDefaults = _requestWithDefaults;
+    const requestAndWithDefaults = createRequestWithDefaults(Logger);
 
     if (job) job.cancel();
     
-    await refreshInternetDb(
-      knex,
-      setKnex,
-      setDataIsLoadedIn,
-      requestDefaults,
-      requestWithDefaults,
-      Logger
-    )();
-
-    const shodanDataRefreshTime = fp.get('shodanDataRefreshTime', config);
+    await refreshInternetDb(knex, setKnex, requestAndWithDefaults, Logger)();
 
     job = schedule.scheduleJob(
       shodanDataRefreshTime,
-      refreshInternetDb(
-        knex,
-        setKnex,
-        setDataIsLoadedIn,
-        requestDefaults,
-        requestWithDefaults,
-        Logger
-      )
+      refreshInternetDb(knex, setKnex, requestAndWithDefaults, Logger)
     );
   } catch (error) {
-    Logger.error(error, 'Error in startup function');
+    Logger.error(error, 'Error on Startup');
     throw error;
   }
 };
@@ -67,9 +45,12 @@ const doLookup = async (entities, options, cb) => {
   } catch (error) {
     Logger.error(error, 'Get Lookup Results Failed');
     return cb({
-      detail: error.message.includes('Knex: Timeout')
-        ? 'Too Many Entities Searched at Once'
-        : 'Search Failed',
+      detail: 
+        error.message.includes('Knex: Timeout') ?
+          'Too Many Entities searched at once.  Try less at one time.' :
+        error.message.includes('Currently Refreshing Database') ?
+          error.message :
+          'Searching Failed',
       err: JSON.parse(JSON.stringify(error, Object.getOwnPropertyNames(error)))
     });
   }
