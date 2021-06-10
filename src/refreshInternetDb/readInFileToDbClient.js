@@ -21,20 +21,6 @@ const readInFileToDbClient = async (
 ) => {
   Logger.trace('Started Loading in Database');
 
-  if (!lessStorageMoreDowntime) {
-    Logger.trace(
-      'Deleting Old Database after Database Decompression. Searching will be disabled for a moment.'
-    );
-
-    const newDatabaseFileExists = fs.existsSync(TEMP_DB_DECOMPRESSION_FILEPATH);
-    const databaseFileExists = fs.existsSync(FINAL_DB_DECOMPRESSION_FILEPATH);
-
-    if (databaseFileExists && newDatabaseFileExists) {
-      fs.unlinkSync(FINAL_DB_DECOMPRESSION_FILEPATH);
-      fs.renameSync(TEMP_DB_DECOMPRESSION_FILEPATH, FINAL_DB_DECOMPRESSION_FILEPATH);
-    }
-  }
-
   if (knex && knex.destroy) {
     setKnex(undefined);
     await knex.destroy();
