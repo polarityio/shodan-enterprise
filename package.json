@@ -6,7 +6,7 @@
   "license": "MIT",
   "author": "Polarity",
   "scripts": {
-    "build": "yum install bzip2",
+    "build": "rm ./data/* && yum install bzip2",
     "reset-database": "rm ./data/*"
   },
   "dependencies": {
