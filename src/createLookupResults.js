@@ -26,10 +26,17 @@ const createLookupResults = (foundEntities, Logger) =>
   )(foundEntities);
 
 const createSummary = (queryResult) => [
-  ...(fp.size(queryResult) > 1
-    ? [`Results Found: ${fp.size(queryResult)}`]
-    : ['Result Found']),
-  ...fp.flow(fp.flatMap(fp.get('tags')), fp.uniq)(queryResult)
+  ...fp.flow(fp.flatMap(fp.get('tags')), fp.uniq)(queryResult),
+  ...(fp.flow(fp.flatMap(fp.get('ports')), fp.size)(queryResult)
+    ? [
+        fp.flow(
+          fp.flatMap(fp.get('ports')),
+          fp.uniq,
+          fp.slice(0, 7),
+          (ports) => `Ports: ${ports.join(',')}${ports.length === 7 ? '...' : ''}`
+        )(queryResult)
+      ]
+    : [])
 ];
 
 const formatQueryResult = fp.map(({ ip, ...otherColumns }) => ({

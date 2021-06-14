@@ -14,8 +14,12 @@ Polarity's Shodan Enterprise Integration gives users access to the Shodan `data/
 
 To learn more about Shodan, please visit the [official website](https://www.shodan.io/).
 
-## **Shodan Enterprise Integration Options**
-Internally, this integration is downloading a compressed database containing the `data/internetdb` data, decompressing it, and formatting it for searching.  This process can require anywhere from 30-1200GB of storage, depending on your configuration and can take upwards of 30 minutes when first running the integration.  Due to the nature of obtaining this data, we have put all of the settings/options for this integration in the `./config/config.js` file. After changing a setting  in the `config.js` you will need to restart your integration using the `Actions -> Restart Integration` dropdown option.
+## Shodan Enterprise Integration Options
+### Max Number Of Results:
+The maximum number of results we will return from the internetdb data set when you search.
+
+## **Database and API Integration Options**
+Internally, this integration is downloading a compressed database containing the `data/internetdb` data, decompressing it, and formatting it for searching.  This process can require anywhere from 30-1200GB of storage, depending on your configuration and can take upwards of 30 minutes when first running the integration.  Due to the nature of obtaining this data, we have put all of the settings/options related to the database and API for this integration in the `./config/config.js` file. After changing a setting  in the `config.js` you will need to restart your integration using the `Actions -> Restart Integration` dropdown option.
 
 > ***NOTE:*** If you are getting errors that do not seem to have an obvious solution, try running `npm run reset-database` then restarting the integration. (*Warning*: This will delete the current database refresh progress, and force a clean database refresh)
 

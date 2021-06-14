@@ -41,7 +41,13 @@ const startup = async (logger) => {
 const doLookup = async (entities, options, cb) => {
   let lookupResults;
   try {
-    lookupResults = await getLookupResults(entities, dataIsLoadedIn, knex, Logger);
+    lookupResults = await getLookupResults(
+      entities,
+      options,
+      dataIsLoadedIn,
+      knex,
+      Logger
+    );
   } catch (error) {
     Logger.error(error, 'Get Lookup Results Failed');
     return cb({
@@ -59,7 +65,17 @@ const doLookup = async (entities, options, cb) => {
   cb(null, lookupResults);
 };
 
+const validateOptions = (userOptions, cb) => {
+  const errors =
+    userOptions.maxResults < 1
+      ? [{ key: 'maxResults', message: 'Must be greater than 0' }]
+      : [];
+
+  cb(null, errors);
+}
+
 module.exports = {
   doLookup,
+  validateOptions,
   startup
 };

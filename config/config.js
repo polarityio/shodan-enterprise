@@ -1,6 +1,6 @@
 module.exports = {
   name: 'Shodan Enterprise',
-  acronym: 'SHOE',
+  acronym: 'SHO-E',
   description:
     "Polarity's Shodan Enterprise Integration gives users access to the Shodan data/internetdb " +
     'endpoint data containing network information about virtually all IPs on the Internet.',
@@ -27,6 +27,17 @@ module.exports = {
   logging: {
     level: 'info' //trace, debug, info, warn, error, fatal
   },
+  options: [
+    {
+      key: 'maxResults',
+      name: 'Max Number Of Results',
+      description: 'The maximum number of results we will return from the internetdb data set when you search.',
+      default: 30,
+      type: 'number',
+      userCanEdit: true,
+      adminOnly: false
+    }
+  ],
   /**
    * Shodan Enterprise Api Key:
    *  Your API Key used to access the '/data/internetdb' endpoint on the Shodan API
