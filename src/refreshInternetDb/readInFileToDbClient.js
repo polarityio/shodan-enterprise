@@ -1,24 +1,14 @@
-const fs = require('fs');
-
-const {
-  lessStorageMoreDowntime,
-  enableDomainAndCveSearching,
-  showNumberOfDatabaseRecords
-} = require('../../config/config');
+const psl = require('psl');
+const { showNumberOfDatabaseRecords } = require('../../config/config');
 
 const { getFileSizeInGB } = require('../dataTransformations');
-const {
-  TEMP_DB_DECOMPRESSION_FILEPATH,
-  FINAL_DB_DECOMPRESSION_FILEPATH
-} = require('../constants');
+const { FINAL_DB_DECOMPRESSION_FILEPATH } = require('../constants');
+
+let ROW_BATCH_SIZE = 100000;
 
 const { getLocalStorageProperty, setLocalStorageProperty } = require('./localStorage');
 
-const readInFileToDbClient = async (
-  knex,
-  setKnex,
-  Logger
-) => {
+const readInFileToDbClient = async (knex, setKnex, Logger) => {
   Logger.trace('Started Loading in Database');
 
   if (knex && knex.destroy) {
@@ -33,33 +23,10 @@ const readInFileToDbClient = async (
     }
   });
 
-  const enableDomainAndCveSearchingSettingChanged =
-    enableDomainAndCveSearching !==
-    getLocalStorageProperty('previousEnableDomainAndCveSearchingSetting');
+  await reformatDatabaseForSearching(_knex, Logger);
 
-  if (enableDomainAndCveSearchingSettingChanged) {
-    Logger.info('Running Indexing of Database for faster searching.');
-    await _knex.raw('DROP INDEX IF EXISTS data_ip_idx;');
-    await _knex.raw('DROP TABLE IF EXISTS data_fts;');
-
-    if (enableDomainAndCveSearching) {
-      await _knex.raw(
-        'CREATE VIRTUAL TABLE data_fts USING fts4(ip TEXT, ports TEXT, tags TEXT, cpes TEXT, vulns TEXT, hostnames TEXT);'
-      );
-      await _knex.raw(
-        'INSERT INTO data_fts SELECT ip, ports, tags, cpes, vulns, hostnames FROM data;'
-      );
-    } else {
-      await _knex.raw('CREATE UNIQUE INDEX data_ip_idx ON data(ip);');
-    }
-    setLocalStorageProperty(
-      'previousEnableDomainAndCveSearchingSetting',
-      enableDomainAndCveSearching
-    );
-  }
-
-  const { 'count(`ip`)': numberOfDatabaseRecords } = showNumberOfDatabaseRecords
-    ? await _knex('data').count('ip').first()
+  const { 'count(`id`)': numberOfDatabaseRecords } = showNumberOfDatabaseRecords
+    ? await _knex('domains').count('id').first()
     : {};
 
   setKnex(_knex);
@@ -68,9 +35,131 @@ const readInFileToDbClient = async (
 
   Logger.info(
     'Loaded in Database. Searching is now Enabled.' +
-      (databaseFileSize ? ` Database File Size After Indexing ${databaseFileSize}GB.` : '') +
+      (databaseFileSize
+        ? ` Database File Size After Indexing ${databaseFileSize}GB.`
+        : '') +
       (numberOfDatabaseRecords ? ` ${numberOfDatabaseRecords} Records Found.` : '')
   );
 };
 
+const reformatDatabaseForSearching = async (_knex, Logger) => {
+  if(getLocalStorageProperty('databaseReformatted')) return;
+
+  Logger.trace('Reformatting Database for Searching');
+
+  const dataTableExists = await _knex.schema.hasTable('data')
+  const dataTableHasContent = dataTableExists && (
+    await _knex.raw('SELECT ip FROM data LIMIT 2')
+  ).length;
+  if (dataTableExists && dataTableHasContent) {
+    await _knex.raw(`DROP TABLE IF EXISTS ips;`);
+    await _knex.schema.createTable('ips', function (table) {
+      table.increments('id').primary();
+      table.string('ip').notNullable().unique().index();
+      table.string('ports');
+      table.string('tags');
+      table.string('cpes');
+      table.string('vulns');
+      table.string('hostnames');
+    });
+    Logger.trace('Starting to create new IP Table');
+    try {
+      await _knex.raw(`INSERT INTO ips SELECT NULL as id, * FROM data;`);
+      Logger.trace('Created new IP Table. Deleting Data Table.');
+      await _knex.raw(`DROP TABLE IF EXISTS data;`);
+    } catch (error) {
+      Logger.error(error, 'error on insert');
+      throw error;
+    }
+  }
+
+  await _knex.raw(`DROP TABLE IF EXISTS domains;`);
+  await _knex.raw(`DROP TABLE IF EXISTS ips_domains;`);
+
+  await _knex.schema
+    .createTable('domains', function (table) {
+      table.increments('id').primary();
+      table.string('domain').notNullable().unique().index();
+      table.string('ip_ids');
+    })
+    .createTable('ips_domains', function (table) {
+      table.increments('id').primary();
+      table.integer('ip_id').references('id').inTable('ips').index();
+      table.integer('domain_id').references('id').inTable('domains').index();
+    });
+
+
+  let count = ROW_BATCH_SIZE;
+  while (count) {
+    count = await reformatDatabaseChunk(count, _knex, Logger);
+  }
+
+  await dropColumn(_knex, 'domains', 'ip_ids');
+
+  setLocalStorageProperty('databaseReformatted', true);
+
+  Logger.trace('Finished Reformatting Database for Searching');
+};
+
+const reformatDatabaseChunk = async (counter, _knex, Logger) => {
+  const currentPageLength = (await _knex('ips')
+    .select('id')
+    .limit(ROW_BATCH_SIZE)
+    .offset(counter)).length;
+
+  if (!currentPageLength) return 0;
+
+  Logger.trace(`Reformatting ${ROW_BATCH_SIZE} records at position ${counter}.`);
+
+  const fullDomains = await _knex.raw(
+    `WITH split(id, domain, str) AS 
+      (SELECT id, '', hostnames||',' FROM (SELECT id, hostnames FROM ips LIMIT ${ROW_BATCH_SIZE} OFFSET ${counter}) UNION ALL SELECT id, substr(str, 0, instr(str, ',')), substr(str, instr(str, ',')+1) FROM split WHERE str!='') 
+      SELECT id as ip_id, domain FROM split WHERE domain!='';`
+  );
+
+  const groupedFullDomains = fullDomains.reduce(function (rv, x) {
+    var v = psl.get(x.domain);
+    rv[v] = rv[v] || '';
+    rv[v] += x.ip_id;
+    rv[v] += ',';
+    return rv;
+  }, {});
+
+  const domainsWithIpIds = Object.keys(groupedFullDomains).map((domain) => ({
+    ip_ids: groupedFullDomains[domain].slice(0, -1),
+    domain
+  }));
+
+  await _knex.transaction((trx) => {
+    let queries = domainsWithIpIds.map(async (row) =>
+      _knex('domains').insert(row).onConflict('domain').merge().transacting(trx)
+    );
+    return Promise.all(queries).then(trx.commit).catch(trx.rollback);
+  });
+
+  const relationalMapping = await _knex.raw(
+    `WITH split(id, ip_id, str) AS
+      (SELECT id, '', ip_ids||',' FROM domains UNION ALL SELECT id, substr(str, 0, instr(str, ',')), substr(str, instr(str, ',')+1) FROM split WHERE str!='')
+      SELECT id as domain_id, CAST(ip_id AS INTEGER) as ip_id FROM split WHERE ip_id!='';`
+  );
+
+  await _knex.batchInsert('ips_domains', relationalMapping, 500);
+
+  await _knex.raw("UPDATE domains SET ip_ids=''");
+
+  return counter + ROW_BATCH_SIZE;
+};
+
+const dropColumn = async (knex, tableName, columnName) => {
+  // knex does not have a dropColumnIfExists
+  await knex.schema.hasColumn(tableName, columnName).then((hasColumn) => {
+    if (hasColumn) {
+      return knex.schema.alterTable(tableName, (table) => {
+        table.dropColumn(columnName);
+      });
+    } else {
+      return null;
+    }
+  });
+};
 module.exports = readInFileToDbClient;

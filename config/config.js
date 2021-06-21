@@ -4,7 +4,7 @@ module.exports = {
   description:
     "Polarity's Shodan Enterprise Integration gives users access to the Shodan data/internetdb " +
     'endpoint data containing network information about virtually all IPs on the Internet.',
-  entityTypes: ['IPv4', 'IPv6', 'domain', 'cve'],
+  entityTypes: ['IPv4', 'IPv6', 'domain'],
   styles: ['./styles/styles.less'],
   defaultColor: 'light-pink',
   onDemandOnly: true,
@@ -31,7 +31,8 @@ module.exports = {
     {
       key: 'maxResults',
       name: 'Max Number Of Results',
-      description: 'The maximum number of results we will return from the internetdb data set when you search.',
+      description:
+        'The maximum number of results we will return from the internetdb data set when you search.',
       default: 30,
       type: 'number',
       userCanEdit: true,
@@ -46,13 +47,6 @@ module.exports = {
    *  over the environment variable.
    */
   shodanEnterpriseApiKey: '',
-  /**
-   * Enable Domain And CVE Searching:
-   *  Enabling Domain and CVE Searching will double the data storage
-   *  requirements for the database and increase the downtime for the database refresh load
-   *  time substantially, and noticeably slow down your searching as well.
-   */
-  enableDomainAndCveSearching: false,
   /**
    * Shodan Data Refresh Time:
    *  How often/When to refresh the local data source with the up to date data from the

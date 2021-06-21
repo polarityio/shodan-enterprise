@@ -11,6 +11,8 @@ const downloadCompressedDatabase = async (downloadLink, requestDefaults, Logger)
   try {
     Logger.trace('Starting Compressed Database Download');
 
+    setLocalStorageProperty('databaseReformatted', false);
+    
     if (shouldSkipCompressedDatabaseDownload(downloadLink)) {
       Logger.info(
         'Compressed Database File Exists and is Up to Date.  Skipping Compressed Database Download.'

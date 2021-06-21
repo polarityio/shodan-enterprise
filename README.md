@@ -1,15 +1,12 @@
 # Polarity Shodan Enterprise Integration
 
-Polarity's Shodan Enterprise Integration gives users access to the Shodan `data/internetdb` endpoint data containing network information about virtually all IPs on the Internet, allowing you to search by for IPs, and with a bit of configuration Domains, and CVEs.
+Polarity's Shodan Enterprise Integration gives users access to the Shodan `data/internetdb` endpoint data containing network information about virtually all IPs on the Internet, allowing you to search by for IPs and Domains.
 
 > ***NOTE:*** Before this integration can function correctly, please use the `npm run build` command to install system level dependencies.
 
 <div style="display:flex; justify-content:flex-start; align-items:flex-start;">
   <img width="350" alt="Integration Example IP Address" src="./assets/integration-example-ip.png">
-</div>
-<div style="display:flex; justify-content:flex-start; align-items:flex-start;">
   <img width="350" alt="Integration Example Domain" src="./assets/integration-example-domain.png">
-  <img width="350" alt="Integration Example CVE" src="./assets/integration-example-cve.png">
 </div>
 
 To learn more about Shodan, please visit the [official website](https://www.shodan.io/).
@@ -26,9 +23,6 @@ Internally, this integration is downloading a compressed database containing the
 ### **Shodan Enterprise Api Key**: 
 Your API Key used to access the /data/internetdb endpoint on the Shodan API.
 If you would prefer to set this in an environment variable instead, use SHODAN_ENTERPRISE_API_KEY as the variable name. The value of the property in the `config.js` will be prioritized over the environment variable.
-
-### **Enable Domain And CVE Searching**: 
-Enabling Domain and CVE Searching will double the data storage requirements for the database and increase the downtime for the database refresh load time substantially, and noticeably slow down your searching as well.
 
 ### **Shodan Data Refresh Time**: 
 How often/when to refresh the local data source with the up to date data from the Shodan API.  This is outline in Cron Format and is defaulted to the first of every month at midnight UTC. Helpful Resources: https://crontab.guru/.

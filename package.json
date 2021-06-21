@@ -10,10 +10,11 @@
     "reset-database": "rm ./data/*"
   },
   "dependencies": {
-    "lodash": "^4.17.19",
-    "request": "^2.88.2",
-    "sqlite3": "^5.0.2",
     "knex": "^0.95.6",
-    "node-schedule": "^2.0.0"
+    "lodash": "^4.17.19",
+    "node-schedule": "^2.0.0",
+    "psl": "^1.8.0",
+    "request": "^2.88.2",
+    "sqlite3": "^5.0.2"
   }
 }
