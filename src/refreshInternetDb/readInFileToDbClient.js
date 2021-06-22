@@ -1,10 +1,11 @@
-const psl = require('psl');
+const { flow, chunk, map } = require('lodash/fp');
 const { showNumberOfDatabaseRecords } = require('../../config/config');
 
 const { getFileSizeInGB } = require('../dataTransformations');
 const { FINAL_DB_DECOMPRESSION_FILEPATH } = require('../constants');
 
-let ROW_BATCH_SIZE = 100000;
+let DEFAULT_ROW_BATCH_SIZE = 100000;
+let MAX_HOSTNAME_BATCH_SIZE = 1000000;
 
 const { getLocalStorageProperty, setLocalStorageProperty } = require('./localStorage');
 
@@ -23,11 +24,7 @@ const readInFileToDbClient = async (knex, setKnex, Logger) => {
     }
   });
 
-  await reformatDatabaseForSearching(_knex, Logger);
-
-  const { 'count(`id`)': numberOfDatabaseRecords } = showNumberOfDatabaseRecords
-    ? await _knex('domains').count('id').first()
-    : {};
+  const numberOfDatabaseRecords = await reformatDatabaseForSearching(_knex, Logger);
 
   setKnex(_knex);
 
@@ -43,14 +40,32 @@ const readInFileToDbClient = async (knex, setKnex, Logger) => {
 };
 
 const reformatDatabaseForSearching = async (_knex, Logger) => {
-  if(getLocalStorageProperty('databaseReformatted')) return;
+  if (getLocalStorageProperty('databaseReformatted')) return;
 
   Logger.trace('Reformatting Database for Searching');
 
-  const dataTableExists = await _knex.schema.hasTable('data')
-  const dataTableHasContent = dataTableExists && (
-    await _knex.raw('SELECT ip FROM data LIMIT 2')
-  ).length;
+  await createSchema(_knex, Logger);
+
+  const { 'count(`id`)': totalRows } = await _knex('ips').count('id').first();
+
+  let count = 0;
+  while (count <= totalRows) {
+    count = await reformatDatabaseChunk(count, totalRows, _knex, Logger);
+  }
+
+  await dropColumn(_knex, 'domains', 'ip_ids');
+
+  setLocalStorageProperty('databaseReformatted', true);
+
+  Logger.trace('Finished Reformatting Database for Searching');
+
+  return totalRows;
+};
+
+const createSchema = async (_knex, Logger) => {
+  const dataTableExists = await _knex.schema.hasTable('data');
+  const dataTableHasContent =
+    dataTableExists && (await _knex.raw('SELECT ip FROM data LIMIT 2')).length;
   if (dataTableExists && dataTableHasContent) {
     await _knex.raw(`DROP TABLE IF EXISTS ips;`);
     await _knex.schema.createTable('ips', function (table) {
@@ -87,67 +102,63 @@ const reformatDatabaseForSearching = async (_knex, Logger) => {
       table.integer('ip_id').references('id').inTable('ips').index();
       table.integer('domain_id').references('id').inTable('domains').index();
     });
-
-
-  let count = ROW_BATCH_SIZE;
-  while (count) {
-    count = await reformatDatabaseChunk(count, _knex, Logger);
-  }
-
-  await dropColumn(_knex, 'domains', 'ip_ids');
-
-  setLocalStorageProperty('databaseReformatted', true);
-
-  Logger.trace('Finished Reformatting Database for Searching');
 };
 
-const reformatDatabaseChunk = async (counter, _knex, Logger) => {
-  const currentPageLength = (await _knex('ips')
-    .select('id')
-    .limit(ROW_BATCH_SIZE)
-    .offset(counter)).length;
+const reformatDatabaseChunk = async (counter, totalRows, _knex, Logger) => {
+  let fullDomains = { length: MAX_HOSTNAME_BATCH_SIZE + 1 },
+    rowBatchSize = DEFAULT_ROW_BATCH_SIZE + DEFAULT_ROW_BATCH_SIZE * 0.2;
+  while (fullDomains.length > MAX_HOSTNAME_BATCH_SIZE) {
+    rowBatchSize = Math.round(rowBatchSize - rowBatchSize * 0.2);
 
-  if (!currentPageLength) return 0;
+    fullDomains = await _knex.raw(
+      `WITH split(id, domain, str) AS
+      (SELECT id, '', hostnames||',' FROM (SELECT id, hostnames FROM ips LIMIT ${rowBatchSize} OFFSET ${counter}) UNION ALL SELECT id, substr(str, 0, instr(str, ',')), substr(str, instr(str, ',')+1) FROM split WHERE str!='') 
+      SELECT id as ip_id, domain FROM split WHERE domain!='' and domain is not null;`
+    );
+  }
 
-  Logger.trace(`Reformatting ${ROW_BATCH_SIZE} records at position ${counter}.`);
+  Logger.trace(`Reformatting ${rowBatchSize} records at position ${counter}.`);
 
-  const fullDomains = await _knex.raw(
-    `WITH split(id, domain, str) AS 
-      (SELECT id, '', hostnames||',' FROM (SELECT id, hostnames FROM ips LIMIT ${ROW_BATCH_SIZE} OFFSET ${counter}) UNION ALL SELECT id, substr(str, 0, instr(str, ',')), substr(str, instr(str, ',')+1) FROM split WHERE str!='') 
-      SELECT id as ip_id, domain FROM split WHERE domain!='';`
-  );
-
-  const groupedFullDomains = fullDomains.reduce(function (rv, x) {
-    var v = psl.get(x.domain);
+  let groupedFullDomains = fullDomains.reduce(function (rv, x) {
+    var v = /[^.]*\.[^.]{2,3}(?:\.[^.]{2,3})?$/.exec(x.domain);
+    v = v && v[0];
     rv[v] = rv[v] || '';
     rv[v] += x.ip_id;
     rv[v] += ',';
     return rv;
   }, {});
+  fullDomains = null;
 
-  const domainsWithIpIds = Object.keys(groupedFullDomains).map((domain) => ({
+  let domainsWithIpIds = Object.keys(groupedFullDomains).map((domain) => ({
     ip_ids: groupedFullDomains[domain].slice(0, -1),
     domain
   }));
+  groupedFullDomains = null;
 
-  await _knex.transaction((trx) => {
-    let queries = domainsWithIpIds.map(async (row) =>
-      _knex('domains').insert(row).onConflict('domain').merge().transacting(trx)
-    );
-    return Promise.all(queries).then(trx.commit).catch(trx.rollback);
-  });
-
-  const relationalMapping = await _knex.raw(
-    `WITH split(id, ip_id, str) AS
-      (SELECT id, '', ip_ids||',' FROM domains UNION ALL SELECT id, substr(str, 0, instr(str, ',')), substr(str, instr(str, ',')+1) FROM split WHERE str!='')
-      SELECT id as domain_id, CAST(ip_id AS INTEGER) as ip_id FROM split WHERE ip_id!='';`
+  await Promise.all(
+    flow(
+      chunk(5000),
+      map((partition) =>
+        _knex.transaction((trx) => {
+          let queries = partition.map(async (row) =>
+            _knex('domains').insert(row).onConflict('domain').merge().transacting(trx)
+          );
+          return Promise.all(queries).then(trx.commit).catch(trx.rollback);
+        })
+      )
+    )(domainsWithIpIds)
   );
+  domainsWithIpIds = null;
 
-  await _knex.batchInsert('ips_domains', relationalMapping, 500);
+  await _knex.raw(
+    `INSERT INTO ips_domains
+      WITH split(id, ip_id, str) AS 
+      (SELECT id, '', ip_ids||',' FROM domains UNION ALL SELECT id, substr(str, 0, instr(str, ',')), substr(str, instr(str, ',')+1) FROM split WHERE str!='') 
+      SELECT NULL as id, CAST(ip_id AS INTEGER) as ip_id, id as domain_id FROM split WHERE ip_id!='' and ip_id is not null;`
+  );
+  await _knex.raw(`UPDATE domains SET ip_ids=''`);
 
-  await _knex.raw("UPDATE domains SET ip_ids=''");
-
-  return counter + ROW_BATCH_SIZE;
+  return Math.min(counter + rowBatchSize, totalRows);
 };
 
 const dropColumn = async (knex, tableName, columnName) => {

@@ -45,9 +45,6 @@ If true, this setting will half the total data storage requirements during the R
 
 This being set to true, however, will make the integration no longer work for the entire database download and decompression time which could possibly be more than 30 minutes. If you set this to true, we would recommend you set your 'Shodan Data Refresh Time' config property to a time of the day where users are not typically using the integration.
 
-### **Show Number Of Database Records**: 
-If true, we will obtain the total number records in the locally hosted database and display them in the logs when refreshing the data in the database. This can add a few minutes to the database refresh load time.
-
 
 ## Installation Instructions
 

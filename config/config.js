@@ -77,12 +77,5 @@ module.exports = {
    *  'shodanDataRefreshTime' config property to a time of the day where users are not
    *  typically using the integration.
    */
-  lessStorageMoreDowntime: true,
-  /**
-   * Show Number Of Database Records:
-   *  If true, we will obtain the total number records in the
-   *  locally hosted database and display them in the logs when refreshing the database.
-   *  This can add a few minutes to the database refresh load time.
-   */
-  showNumberOfDatabaseRecords: false
+  lessStorageMoreDowntime: true
 };
