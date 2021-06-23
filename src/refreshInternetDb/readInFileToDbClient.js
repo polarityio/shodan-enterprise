@@ -1,11 +1,10 @@
 const { flow, chunk, map } = require('lodash/fp');
-const { showNumberOfDatabaseRecords } = require('../../config/config');
 
 const { getFileSizeInGB } = require('../dataTransformations');
 const { FINAL_DB_DECOMPRESSION_FILEPATH } = require('../constants');
 
-let DEFAULT_ROW_BATCH_SIZE = 100000;
-let MAX_HOSTNAME_BATCH_SIZE = 1000000;
+let DEFAULT_ROW_BATCH_SIZE = 1000000;
+let MAX_HOSTNAME_BATCH_SIZE = 900000;
 
 const { getLocalStorageProperty, setLocalStorageProperty } = require('./localStorage');
 
@@ -106,17 +105,21 @@ const createSchema = async (_knex, Logger) => {
 
 const reformatDatabaseChunk = async (counter, totalRows, _knex, Logger) => {
   let fullDomains = { length: MAX_HOSTNAME_BATCH_SIZE + 1 },
-    rowBatchSize = DEFAULT_ROW_BATCH_SIZE + DEFAULT_ROW_BATCH_SIZE * 0.2;
+    rowBatchSize =
+      DEFAULT_ROW_BATCH_SIZE +
+      DEFAULT_ROW_BATCH_SIZE * 0.2 +
+      DEFAULT_ROW_BATCH_SIZE * 0.05;
+      
   while (fullDomains.length > MAX_HOSTNAME_BATCH_SIZE) {
+    fullDomains = null;
     rowBatchSize = Math.round(rowBatchSize - rowBatchSize * 0.2);
 
     fullDomains = await _knex.raw(
       `WITH split(id, domain, str) AS
       (SELECT id, '', hostnames||',' FROM (SELECT id, hostnames FROM ips LIMIT ${rowBatchSize} OFFSET ${counter}) UNION ALL SELECT id, substr(str, 0, instr(str, ',')), substr(str, instr(str, ',')+1) FROM split WHERE str!='') 
-      SELECT id as ip_id, domain FROM split WHERE domain!='' and domain is not null;`
+      SELECT id as ip_id, LOWER(domain) as domain FROM split WHERE domain!='' and domain is not null;`
     );
   }
-
   Logger.trace(`Reformatting ${rowBatchSize} records at position ${counter}.`);
 
   let groupedFullDomains = fullDomains.reduce(function (rv, x) {
