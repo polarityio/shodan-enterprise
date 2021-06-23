@@ -3,8 +3,8 @@ const { flow, chunk, map } = require('lodash/fp');
 const { getFileSizeInGB } = require('../dataTransformations');
 const { FINAL_DB_DECOMPRESSION_FILEPATH } = require('../constants');
 
-let DEFAULT_ROW_BATCH_SIZE = 1000000;
-let MAX_HOSTNAME_BATCH_SIZE = 900000;
+let DEFAULT_ROW_BATCH_SIZE = 200000;
+let MAX_HOSTNAME_BATCH_SIZE = 500000;
 
 const { getLocalStorageProperty, setLocalStorageProperty } = require('./localStorage');
 
