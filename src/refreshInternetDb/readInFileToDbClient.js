@@ -48,7 +48,7 @@ const reformatDatabaseForSearching = async (_knex, Logger) => {
   const { 'count(`id`)': totalRows } = await _knex('ips').count('id').first();
 
   let count = 0;
-  while (count <= totalRows) {
+  while (count < totalRows) {
     count = await reformatDatabaseChunk(count, totalRows, _knex, Logger);
   }
 
