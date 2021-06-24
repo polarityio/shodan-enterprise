@@ -33,7 +33,7 @@ const _getFoundEntities = async (entitiesPartition, options, knex, Logger) =>
         
         queryResult = await knex.raw(query);
       } else if (entity.isIP) {
-        queryResult = await knex('data').select('*').where('ip', '=', entity.value);
+        queryResult = await knex('ips').select('*').where('ip', '=', entity.value);
       }
 
       return { entity, queryResult };
