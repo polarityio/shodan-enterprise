@@ -7,7 +7,7 @@ module.exports = {
   entityTypes: ['IPv4', 'IPv6', 'domain'],
   styles: ['./styles/styles.less'],
   defaultColor: 'light-pink',
-  onDemandOnly: true,
+  onDemandOnly: false,
   block: {
     component: {
       file: './components/block.js'
