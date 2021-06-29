@@ -24,13 +24,20 @@ const _getFoundEntities = async (entitiesPartition, options, knex, Logger) =>
     fp.map(async (entity) => {
       let queryResult;
       if (entity.isDomain) {
+        const searchString = fp.flow(
+          fp.get('value'),
+          fp.toLower,
+          (domain) => /[^.]*\.[^.]{2,3}(?:\.[^.]{2,3})?$/.exec(domain),
+          fp.first
+        )(entity);
+
         let query = `
           SELECT i.*
           FROM ips i, domains d, ips_domains di 
-          WHERE di.ip_id = i.id AND di.domain_id IN (SELECT id from domains where domain = '${entity.value.toLowerCase()}')
+          WHERE di.ip_id = i.id AND di.domain_id IN (SELECT id from domains where domain = '${searchString}')
           LIMIT ${options.maxResults};
         `;
-        
+
         queryResult = fp.uniqBy('ip', await knex.raw(query));
       } else if (entity.isIP) {
         queryResult = await knex('ips').select('*').where('ip', '=', entity.value);
