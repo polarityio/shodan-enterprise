@@ -7,6 +7,7 @@ const {
   DEFAULT_ROW_BATCH_SIZE,
   MAX_HOSTNAME_BATCH_SIZE,
   MIN_HOSTNAME_BATCH_SIZE,
+  MAX_PRIMARY_DOMAINS,
   SQL_SPLIT_HOSTNAME_COLUMN,
   SQL_DROP_TABLE,
   SQL_CREATE_IPS_TABLE,
@@ -18,6 +19,7 @@ const {
 
 const { getLocalStorageProperty, setLocalStorageProperty } = require('./localStorage');
 
+let _newBatchSizeForPrimaryDomainLessening = 0;
 
 const readInFileToDbClient = async (knex, setKnex, Logger) => {
   Logger.trace('Started Loading in Database');
@@ -62,6 +64,7 @@ const reformatDatabaseForSearching = async (_knex, Logger) => {
   }
 
   await _knex.raw(SQL_CREATE_INDICES);
+  await _knex.raw('PRAGMA incremental_vacuum;');
 
   setLocalStorageProperty('databaseReformatted', true);
 
@@ -71,6 +74,8 @@ const reformatDatabaseForSearching = async (_knex, Logger) => {
 };
 
 const createSchema = async (_knex, Logger) => {
+  _knex.raw('PRAGMA auto_vacuum = INCREMENTAL;');
+
   const dataTableExists = await _knex.schema.hasTable('data');
   const dataTableHasContent =
     dataTableExists && (await _knex.raw('SELECT ip FROM data LIMIT 2')).length;
@@ -93,6 +98,8 @@ const createSchema = async (_knex, Logger) => {
   await _knex.raw(SQL_DROP_TABLE('ips_domains'));
   await _knex.raw(SQL_CREATE_DOMAINS_TABLE);
   await _knex.raw(SQL_CREATE_IPS_DOMAINS_RELATIONAL_TABLE);
+
+  await _knex.raw('PRAGMA incremental_vacuum;');
 };
 
 const reformatDatabaseChunk = async (counter, totalRows, _knex, Logger) => {
@@ -102,18 +109,25 @@ const reformatDatabaseChunk = async (counter, totalRows, _knex, Logger) => {
       DEFAULT_ROW_BATCH_SIZE * 0.2 +
       DEFAULT_ROW_BATCH_SIZE * 0.05;
 
-  while (
-    !(rowBatchSize === MAX_ROW_BATCH_SIZE && fullDomains.length <= MAX_HOSTNAME_BATCH_SIZE) && 
-    !(fullDomains.length >= MIN_HOSTNAME_BATCH_SIZE && fullDomains.length <= MAX_HOSTNAME_BATCH_SIZE) 
-  ) {
-    rowBatchSize =
-      fullDomains.length > MAX_HOSTNAME_BATCH_SIZE
-        ? Math.round(rowBatchSize - rowBatchSize * 0.2)
-        : Math.min(MAX_ROW_BATCH_SIZE, rowBatchSize * 2);
+  if(_newBatchSizeForPrimaryDomainLessening) {
+    rowBatchSize = _newBatchSizeForPrimaryDomainLessening;
+    fullDomains = await _knex.raw(SQL_SPLIT_HOSTNAME_COLUMN(rowBatchSize, counter));
+    _newBatchSizeForPrimaryDomainLessening = 0;
+  } else {
+    while (
+      !(rowBatchSize === MAX_ROW_BATCH_SIZE && fullDomains.length <= MAX_HOSTNAME_BATCH_SIZE) && 
+      !(fullDomains.length >= MIN_HOSTNAME_BATCH_SIZE && fullDomains.length <= MAX_HOSTNAME_BATCH_SIZE) 
+    ) {
+      rowBatchSize =
+        fullDomains.length > MAX_HOSTNAME_BATCH_SIZE
+          ? Math.round(rowBatchSize - rowBatchSize * 0.2)
+          : Math.min(MAX_ROW_BATCH_SIZE, rowBatchSize * 2);
 
-    fullDomains = null;
-    fullDomains = await _knex.raw(SQL_SPLIT_HOSTNAME_COLUMN(rowBatchSize,counter));
+      fullDomains = null;
+      fullDomains = await _knex.raw(SQL_SPLIT_HOSTNAME_COLUMN(rowBatchSize, counter));
+    }
   }
+
   Logger.trace(`Reformatting ${rowBatchSize} records at position ${counter}.`);
 
   let groupedFullDomains = fullDomains.reduce(function (rv, x) {
@@ -124,6 +138,11 @@ const reformatDatabaseChunk = async (counter, totalRows, _knex, Logger) => {
     return rv;
   }, {});
   fullDomains = null;
+
+  if (Object.keys(groupedFullDomains).length > MAX_PRIMARY_DOMAINS) {
+    _newBatchSizeForPrimaryDomainLessening = Math.round(rowBatchSize - rowBatchSize * 0.3); 
+    return counter;
+  }
 
   await Promise.all(
     flow(
@@ -144,6 +163,8 @@ const reformatDatabaseChunk = async (counter, totalRows, _knex, Logger) => {
       }))
     )(groupedFullDomains)
   );
+
+  await _knex.raw('PRAGMA incremental_vacuum;');
 
   return Math.min(counter + rowBatchSize, totalRows);
 };
