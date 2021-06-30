@@ -64,7 +64,7 @@ const reformatDatabaseForSearching = async (_knex, Logger) => {
   }
 
   await _knex.raw(SQL_CREATE_INDICES);
-  await _knex.raw('PRAGMA incremental_vacuum;');
+  await _knex.raw('VACUUM;');
 
   setLocalStorageProperty('databaseReformatted', true);
 
@@ -74,7 +74,7 @@ const reformatDatabaseForSearching = async (_knex, Logger) => {
 };
 
 const createSchema = async (_knex, Logger) => {
-  _knex.raw('PRAGMA auto_vacuum = INCREMENTAL;');
+  await _knex.raw('PRAGMA journal_mode=OFF');
 
   const dataTableExists = await _knex.schema.hasTable('data');
   const dataTableHasContent =
@@ -99,7 +99,7 @@ const createSchema = async (_knex, Logger) => {
   await _knex.raw(SQL_CREATE_DOMAINS_TABLE);
   await _knex.raw(SQL_CREATE_IPS_DOMAINS_RELATIONAL_TABLE);
 
-  await _knex.raw('PRAGMA incremental_vacuum;');
+  await _knex.raw('VACUUM;');
 };
 
 const reformatDatabaseChunk = async (counter, totalRows, _knex, Logger) => {
@@ -149,22 +149,25 @@ const reformatDatabaseChunk = async (counter, totalRows, _knex, Logger) => {
       keys,
       chunk(5000),
       flatMap(map(async (domain) => {
-        const [domain_id] = await _knex('domains')
-          .returning('id')
-          .insert({ domain })
-          .onConflict('domain')
-          .ignore();
-
-        await _knex.batchInsert(
-          'ips_domains',
-          map((ip_id) => ({ ip_id, domain_id }), groupedFullDomains[domain]),
-          500
-        );
+        await _knex.transaction(async (trx) => {
+          const [domain_id] = await _knex('domains')
+            .returning('id')
+            .insert({ domain })
+            .onConflict('domain')
+            .ignore()
+            .transacting(trx);
+  
+          await _knex
+            .batchInsert(
+              'ips_domains',
+              map((ip_id) => ({ ip_id, domain_id }), groupedFullDomains[domain]),
+              500
+            )
+            .transacting(trx);
+        });
       }))
     )(groupedFullDomains)
   );
-
-  await _knex.raw('PRAGMA incremental_vacuum;');
 
   return Math.min(counter + rowBatchSize, totalRows);
 };
