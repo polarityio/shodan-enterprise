@@ -103,67 +103,96 @@ const createSchema = async (_knex, Logger) => {
 };
 
 const reformatDatabaseChunk = async (counter, totalRows, _knex, Logger) => {
-  let fullDomains = { length: MAX_HOSTNAME_BATCH_SIZE + 1 },
+  const { fullDomainNamesWithIpIds, rowBatchSize } = await getFullDomainNamesWithIpIds(
+    counter,
+    _knex
+  );
+
+  Logger.trace(`Reformatting ${rowBatchSize} records at position ${counter}.`);
+
+  let primaryDomainByIpIds = getPrimaryDomainByIpIds(fullDomainNamesWithIpIds);  
+  fullDomainNamesWithIpIds = null;
+
+  if (Object.keys(primaryDomainByIpIds).length > MAX_PRIMARY_DOMAINS) {
+    _newBatchSizeForPrimaryDomainLessening = Math.round(rowBatchSize - rowBatchSize * 0.3); 
+    return counter;
+  }
+
+  await insertPrimaryDomainsAndRelationships(primaryDomainByIpIds, _knex);
+  primaryDomainByIpIds = null;
+  
+  return Math.min(counter + rowBatchSize, totalRows);
+};
+
+
+const getFullDomainNamesWithIpIds = async (counter, _knex) => {
+  let fullDomainNamesWithIpIds = { length: MAX_HOSTNAME_BATCH_SIZE + 1 },
     rowBatchSize =
       DEFAULT_ROW_BATCH_SIZE +
       DEFAULT_ROW_BATCH_SIZE * 0.2 +
       DEFAULT_ROW_BATCH_SIZE * 0.05;
 
-  if(_newBatchSizeForPrimaryDomainLessening) {
+  if (_newBatchSizeForPrimaryDomainLessening) {
     rowBatchSize = _newBatchSizeForPrimaryDomainLessening;
-    fullDomains = await _knex.raw(SQL_SPLIT_HOSTNAME_COLUMN(rowBatchSize, counter));
+    fullDomainNamesWithIpIds = await _knex.raw(
+      SQL_SPLIT_HOSTNAME_COLUMN(rowBatchSize, counter)
+    );
     _newBatchSizeForPrimaryDomainLessening = 0;
   } else {
-    while (
-      !(rowBatchSize === MAX_ROW_BATCH_SIZE && fullDomains.length <= MAX_HOSTNAME_BATCH_SIZE) && 
-      !(fullDomains.length >= MIN_HOSTNAME_BATCH_SIZE && fullDomains.length <= MAX_HOSTNAME_BATCH_SIZE) 
-    ) {
+    const batchSizeMaxAndHostnameSizeAcceptable =
+      rowBatchSize === MAX_ROW_BATCH_SIZE &&
+      fullDomainNamesWithIpIds.length <= MAX_HOSTNAME_BATCH_SIZE;
+
+    const hostnameSizeInCorrectRange =
+      fullDomainNamesWithIpIds.length >= MIN_HOSTNAME_BATCH_SIZE &&
+      fullDomainNamesWithIpIds.length <= MAX_HOSTNAME_BATCH_SIZE;
+
+    while (!batchSizeMaxAndHostnameSizeAcceptable && !hostnameSizeInCorrectRange) {
       rowBatchSize =
-        fullDomains.length > MAX_HOSTNAME_BATCH_SIZE
+        fullDomainNamesWithIpIds.length > MAX_HOSTNAME_BATCH_SIZE
           ? Math.round(rowBatchSize - rowBatchSize * 0.2)
           : Math.min(MAX_ROW_BATCH_SIZE, rowBatchSize * 2);
 
-      fullDomains = null;
-      fullDomains = await _knex.raw(SQL_SPLIT_HOSTNAME_COLUMN(rowBatchSize, counter));
+      fullDomainNamesWithIpIds = null;
+      fullDomainNamesWithIpIds = await _knex.raw(
+        SQL_SPLIT_HOSTNAME_COLUMN(rowBatchSize, counter)
+      );
     }
   }
 
-  Logger.trace(`Reformatting ${rowBatchSize} records at position ${counter}.`);
+  return { fullDomainNamesWithIpIds, rowBatchSize };
+};
 
-  let groupedFullDomains = fullDomains.reduce(function (rv, x) {
+const getPrimaryDomainByIpIds = (fullDomainNamesWithIpIds) =>
+  fullDomainNamesWithIpIds.reduce(function (rv, x) {
     var v = /[^.]*\.[^.]{2,3}(?:\.[^.]{2,3})?$/.exec(x.domain);
     v = v && v[0];
     rv[v] = rv[v] || [];
     rv[v].push(x.ip_id);
     return rv;
   }, {});
-  fullDomains = null;
 
-  if (Object.keys(groupedFullDomains).length > MAX_PRIMARY_DOMAINS) {
-    _newBatchSizeForPrimaryDomainLessening = Math.round(rowBatchSize - rowBatchSize * 0.3); 
-    return counter;
-  }
-
-  await Promise.all(
+const insertPrimaryDomainsAndRelationships = async (primaryDomainByIpIds, _knex) =>
+  Promise.all(
     flow(
       keys,
       chunk(5000),
-      flatMap(map(async (domain) => {
-        const [domain_id] = await _knex('domains')
-          .returning('id')
-          .insert({ domain })
-          .onConflict('domain')
-          .ignore()
+      flatMap(
+        map(async (domain) => {
+          const [domain_id] = await _knex('domains')
+            .returning('id')
+            .insert({ domain })
+            .onConflict('domain')
+            .ignore();
 
-        await _knex.batchInsert(
-          'ips_domains',
-          map((ip_id) => ({ ip_id, domain_id }), groupedFullDomains[domain]),
-          500
-        )
-      }))
-    )(groupedFullDomains)
+          await _knex.batchInsert(
+            'ips_domains',
+            map((ip_id) => ({ ip_id, domain_id }), primaryDomainByIpIds[domain]),
+            500
+          );
+        })
+      )
+    )(primaryDomainByIpIds)
   );
-  return Math.min(counter + rowBatchSize, totalRows);
-};
 
 module.exports = readInFileToDbClient;
