@@ -149,26 +149,20 @@ const reformatDatabaseChunk = async (counter, totalRows, _knex, Logger) => {
       keys,
       chunk(5000),
       flatMap(map(async (domain) => {
-        await _knex.transaction(async (trx) => {
-          const [domain_id] = await _knex('domains')
-            .returning('id')
-            .insert({ domain })
-            .onConflict('domain')
-            .ignore()
-            .transacting(trx);
-  
-          await _knex
-            .batchInsert(
-              'ips_domains',
-              map((ip_id) => ({ ip_id, domain_id }), groupedFullDomains[domain]),
-              500
-            )
-            .transacting(trx);
-        });
+        const [domain_id] = await _knex('domains')
+          .returning('id')
+          .insert({ domain })
+          .onConflict('domain')
+          .ignore()
+
+        await _knex.batchInsert(
+          'ips_domains',
+          map((ip_id) => ({ ip_id, domain_id }), groupedFullDomains[domain]),
+          500
+        )
       }))
     )(groupedFullDomains)
   );
-
   return Math.min(counter + rowBatchSize, totalRows);
 };
 
