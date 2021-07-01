@@ -1,3 +1,4 @@
+const fs = require('fs');
 const { flow, chunk, map, keys, flatMap } = require('lodash/fp');
 
 const { getFileSizeInGB } = require('../dataTransformations');

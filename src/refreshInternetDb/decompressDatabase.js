@@ -39,7 +39,6 @@ const decompressDatabase = async (
       }
     }
 
-    
     const { stdout: databaseDecompressionMessage, stderr } = await exec(
       `bzip2 -dc1 ${COMPRESSED_DB_FILEPATH} > ${decompressionFilePath}`
     );
