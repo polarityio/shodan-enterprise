@@ -4,7 +4,7 @@ Polarity's Shodan Enterprise Integration gives users access to the Shodan `data/
 
 > ***NOTE:*** Before this integration can function correctly, please use the `npm run build` command to install system level dependencies.
 
-<div style="display:flex; justify-content:flex-start; align-items:flex-start;">
+<div style="display:flex; align-items: flex-start; justify-content:flex-start; align-items:flex-start;">
   <img width="350" alt="Integration Example IP Address" src="./assets/integration-example-ip.png">
   <img width="350" alt="Integration Example Domain" src="./assets/integration-example-domain.png">
 </div>
