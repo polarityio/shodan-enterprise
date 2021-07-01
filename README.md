@@ -25,7 +25,7 @@ Your API Key used to access the /data/internetdb endpoint on the Shodan API.
 If you would prefer to set this in an environment variable instead, use SHODAN_ENTERPRISE_API_KEY as the variable name. The value of the property in the `config.js` will be prioritized over the environment variable.
 
 ### **Shodan Data Refresh Time**: 
-How often/when to refresh the local data source with the up to date data from the Shodan API.  This is outline in Cron Format and is defaulted to the first of every month at midnight UTC. Helpful Resources: https://crontab.guru/.
+How often/when to refresh the local data source with the up to date data from the Shodan API.  This is outline in Cron Format and is defaulted to the first of every month at midnight UTC. If you would like to never update your database after the initial install, set this string to `never-update`.  Helpful Resources: https://crontab.guru/.Helpful 
 ```
 '* * * * * *'
  ┬ ┬ ┬ ┬ ┬ ┬
@@ -38,6 +38,7 @@ How often/when to refresh the local data source with the up to date data from th
 '42 * * * *' -> Execute when the minute is 42 (e.g. 19:42, 20:42, etc.).
 '*/5 * * * *' -> Execute every 5th minute
 '0 0 1 * *' -> Execute at 00:00 on day-of-month 1 (current default).
+'never-update' -> Never Update after initial install of the database
 ```
 
 ### **Less Storage More Downtime**:

@@ -5,6 +5,7 @@ const config = require('../../config/config');
 
 const {
   FINAL_DB_DECOMPRESSION_FILEPATH,
+  TEMP_DB_DECOMPRESSION_FILEPATH,
   MAX_ROW_BATCH_SIZE,
   DEFAULT_ROW_BATCH_SIZE,
   MAX_HOSTNAME_BATCH_SIZE,
@@ -24,21 +25,38 @@ const { getLocalStorageProperty, setLocalStorageProperty } = require('./localSto
 let _newBatchSizeForPrimaryDomainLessening = 0;
 
 const readInFileToDbClient = async (knex, setKnex, Logger) => {
-  Logger.trace('Started Loading in Database');
+  Logger.info('Started Loading in Database');
 
-  if (knex && knex.destroy) {
-    setKnex(undefined);
-    await knex.destroy();
-  }
-
-  const _knex = await require('knex')({
+  let _knex = await require('knex')({
     client: 'sqlite3',
     connection: {
-      filename: FINAL_DB_DECOMPRESSION_FILEPATH
+      filename: config.lessStorageMoreDowntime
+        ? FINAL_DB_DECOMPRESSION_FILEPATH
+        : TEMP_DB_DECOMPRESSION_FILEPATH
     }
   });
 
   const numberOfDatabaseRecords = await reformatDatabaseForSearching(_knex, Logger);
+
+  if (!config.lessStorageMoreDowntime) {
+    Logger.info(
+      'Deleting Old Database. Searching will be disabled for a moment.'
+    );
+
+    if (knex && knex.destroy) {
+      setKnex(undefined);
+      await knex.destroy();
+    }
+
+    deleteOldDbAndRenameTempFile();
+
+    _knex = await require('knex')({
+      client: 'sqlite3',
+      connection: {
+        filename: FINAL_DB_DECOMPRESSION_FILEPATH
+      }
+    });
+  }
 
   setKnex(_knex);
 
@@ -54,12 +72,13 @@ const readInFileToDbClient = async (knex, setKnex, Logger) => {
 const reformatDatabaseForSearching = async (_knex, Logger) => {
   if (getLocalStorageProperty('databaseReformatted')) return;
 
-  Logger.trace('Reformatting Database for Searching');
+  Logger.info('Reformatting Database for Searching. This will take at least 4 hours.');
 
   await createSchema(_knex, Logger);
 
   const { 'count(`id`)': totalRows } = await _knex('ips').count('id').first();
 
+  Logger.trace(`Total Records to Process: ${totalRows}`);
   let count = 0;
   while (count < totalRows) {
     count = await reformatDatabaseChunk(count, totalRows, _knex, Logger);
@@ -70,7 +89,7 @@ const reformatDatabaseForSearching = async (_knex, Logger) => {
 
   setLocalStorageProperty('databaseReformatted', true);
 
-  Logger.trace('Finished Reformatting Database for Searching');
+  Logger.info('Finished Reformatting Database for Searching');
 
   return totalRows;
 };
@@ -85,10 +104,10 @@ const createSchema = async (_knex, Logger) => {
     await _knex.raw(SQL_DROP_TABLE('ips'));
     await _knex.raw(SQL_CREATE_IPS_TABLE);
     
-    Logger.trace('Starting to create new IP Table');
+    Logger.info('Starting upload to newly formatted IP Address Table');
     try {
       await _knex.raw(SQL_ADD_DATA_TO_IPS);
-      Logger.trace('Created new IP Table. Deleting Data Table.');
+      Logger.info('Finished uploading to new IP Address Table. Deleting unformatted Data Table.');
       await _knex.raw(SQL_DROP_TABLE('data'));
     } catch (error) {
       Logger.error(error, 'Error on IP Table Insert');
@@ -165,9 +184,10 @@ const getFullDomainNamesWithIpIds = async (counter, _knex) => {
   return { fullDomainNamesWithIpIds, rowBatchSize };
 };
 
+const roughPrimaryDomainRegex = /[^.]*\.[^.]{2,3}(?:\.[^.]{2,3})?$/;
 const getPrimaryDomainByIpIds = (fullDomainNamesWithIpIds) =>
   fullDomainNamesWithIpIds.reduce(function (rv, x) {
-    var v = /[^.]*\.[^.]{2,3}(?:\.[^.]{2,3})?$/.exec(x.domain);
+    var v = roughPrimaryDomainRegex.exec(x.domain);
     v = v && v[0];
     rv[v] = rv[v] || [];
     rv[v].push(x.ip_id);
@@ -196,5 +216,18 @@ const insertPrimaryDomainsAndRelationships = async (primaryDomainByIpIds, _knex)
       )
     )(primaryDomainByIpIds)
   );
+
+const deleteOldDbAndRenameTempFile = () => {
+  const newDatabaseFileExists = fs.existsSync(TEMP_DB_DECOMPRESSION_FILEPATH);
+  const databaseFileExists = fs.existsSync(FINAL_DB_DECOMPRESSION_FILEPATH);
+
+  if (databaseFileExists && newDatabaseFileExists) {
+    fs.unlinkSync(FINAL_DB_DECOMPRESSION_FILEPATH);
+  }
+
+  if (newDatabaseFileExists) {
+    fs.renameSync(TEMP_DB_DECOMPRESSION_FILEPATH, FINAL_DB_DECOMPRESSION_FILEPATH);
+  }
+};
 
 module.exports = readInFileToDbClient;

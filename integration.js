@@ -28,10 +28,12 @@ const startup = async (logger) => {
     
     await refreshInternetDb(knex, setKnex, requestAndWithDefaults, Logger)();
 
-    job = schedule.scheduleJob(
-      shodanDataRefreshTime,
-      refreshInternetDb(knex, setKnex, requestAndWithDefaults, Logger)
-    );
+    if (shodanDataRefreshTime !== 'never-update') {
+      job = schedule.scheduleJob(
+        shodanDataRefreshTime,
+        refreshInternetDb(knex, setKnex, requestAndWithDefaults, Logger)
+      );
+    }
   } catch (error) {
     Logger.error(error, 'Error on Startup');
     throw error;

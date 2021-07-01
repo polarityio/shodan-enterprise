@@ -51,7 +51,9 @@ module.exports = {
    * Shodan Data Refresh Time:
    *  How often/When to refresh the local data source with the up to date data from the
    *  Shodan API.  This is outline in Cron Format and is defaulted to the first of
-   *  every month at midnight UTC. Helpful Resources: https://crontab.guru/.
+   *  every month at midnight UTC. If you would like to never update your database after
+   *  the initial install, set this string to `never-update`.
+   *  Helpful Resources: https://crontab.guru/.
    * '* * * * * *'
    *  ┬ ┬ ┬ ┬ ┬ ┬
    *  │ │ │ │ │ └ day of week (0 - 7) (0 or 7 is Sun)
@@ -64,6 +66,7 @@ module.exports = {
   // '42 * * * *' -> Execute when the minute is 42 (e.g. 19:42, 20:42, etc.).
   // '*/5 * * * *' -> Execute every 5th minute
   // '0 0 1 * *' -> Execute at 00:00 on day-of-month 1.
+  // 'never-update' -> Never Update after initial install of the database
   shodanDataRefreshTime: '0 0 1 * *',
   /**
    * Less Storage More Downtime:
@@ -81,9 +84,9 @@ module.exports = {
   /**
    * Minimize End Database Size:
    *  If true, this setting will double the total data storage requirements during the
-   *  database reformatting process (from ~45GBs upwards to ~90+GBs), but after the 
-   *  reformatting process will almost half the amount of storage required for the 
-   *  database file (from ~45GBs to ~27GBs) and improve search speeds slightly. 
+   *  database reformatting process (from ~45GBs upwards to ~90+GBs), but after the
+   *  reformatting process will almost half the amount of storage required for the
+   *  database file (from ~45GBs to ~27GBs) and improve search speeds slightly.
    */
   minimizeEndDatabaseSize: true
 };
