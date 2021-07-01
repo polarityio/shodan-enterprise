@@ -1,6 +1,8 @@
 const { flow, chunk, map, keys, flatMap } = require('lodash/fp');
 
 const { getFileSizeInGB } = require('../dataTransformations');
+const config = require('../../config/config');
+
 const {
   FINAL_DB_DECOMPRESSION_FILEPATH,
   MAX_ROW_BATCH_SIZE,
@@ -64,7 +66,7 @@ const reformatDatabaseForSearching = async (_knex, Logger) => {
   }
 
   await _knex.raw(SQL_CREATE_INDICES);
-  await _knex.raw('VACUUM;');
+  if (config.minimizeEndDatabaseSize) await _knex.raw('VACUUM;');
 
   setLocalStorageProperty('databaseReformatted', true);
 
@@ -99,7 +101,7 @@ const createSchema = async (_knex, Logger) => {
   await _knex.raw(SQL_CREATE_DOMAINS_TABLE);
   await _knex.raw(SQL_CREATE_IPS_DOMAINS_RELATIONAL_TABLE);
 
-  await _knex.raw('VACUUM;');
+  if (config.minimizeEndDatabaseSize) await _knex.raw('VACUUM;');
 };
 
 const reformatDatabaseChunk = async (counter, totalRows, _knex, Logger) => {

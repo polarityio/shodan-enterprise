@@ -16,7 +16,7 @@ To learn more about Shodan, please visit the [official website](https://www.shod
 The maximum number of results we will return from the internetdb data set when you search.
 
 ## **Database and API Integration Options**
-Internally, this integration is downloading a compressed database containing the `data/internetdb` data, decompressing it, and formatting it for searching.  This process can require anywhere from 30-120GB of storage, depending on your configuration and can take upwards of 20 hours when first running the integration.  Due to the nature of obtaining this data, we have put all of the settings/options related to the database and API for this integration in the `./config/config.js` file. After changing a setting  in the `config.js` you will need to restart your integration using the `Actions -> Restart Integration` dropdown option.
+Internally, this integration is downloading a compressed database containing the `data/internetdb` data, decompressing it, and formatting it for searching.  This process can require anywhere from 30-120GB of storage, depending on your configuration and can take upwards of 7 hours when first running the integration.  Due to the nature of obtaining this data, we have put all of the settings/options related to the database and API for this integration in the `./config/config.js` file. After changing a setting  in the `config.js` you will need to restart your integration using the `Actions -> Restart Integration` dropdown option.
 
 > ***NOTE:*** If you are getting errors that do not seem to have an obvious solution, try running `npm run reset-database` then restarting the integration. (*Warning*: This will delete the current database refresh progress, and force a clean database refresh)
 
@@ -41,9 +41,12 @@ How often/when to refresh the local data source with the up to date data from th
 ```
 
 ### **Less Storage More Downtime**:
-If true, this setting will half the total data storage requirements during the Refreshing process of your local Database. With this setting to false, the total file storage requirements can at times be in excess of 60-120GB.
+If true, this setting will half the total data storage requirements during the Refreshing process of your local Database. With this setting to false, the total file storage requirements can at times be in excess of 60-140GB.
 
 This being set to true, however, will make the integration no longer work for the entire database download and decompression time which could possibly be more than 30 minutes. If you set this to true, we would recommend you set your 'Shodan Data Refresh Time' config property to a time of the day where users are not typically using the integration.
+
+### Minimize End Database Size:
+If true, this setting will double the total data storage requirements during the database reformatting process (from ~45GBs upwards to ~90+GBs), but after the reformatting process will  half the amount of storage required for the database file (from ~45GBs to ~27GBs) and improve search speeds slightly. 
 
 
 ## Installation Instructions

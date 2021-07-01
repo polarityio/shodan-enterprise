@@ -77,5 +77,13 @@ module.exports = {
    *  'shodanDataRefreshTime' config property to a time of the day where users are not
    *  typically using the integration.
    */
-  lessStorageMoreDowntime: true
+  lessStorageMoreDowntime: true,
+  /**
+   * Minimize End Database Size:
+   *  If true, this setting will double the total data storage requirements during the
+   *  database reformatting process (from ~45GBs upwards to ~90+GBs), but after the 
+   *  reformatting process will almost half the amount of storage required for the 
+   *  database file (from ~45GBs to ~27GBs) and improve search speeds slightly. 
+   */
+  minimizeEndDatabaseSize: true
 };
