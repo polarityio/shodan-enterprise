@@ -79,7 +79,7 @@ const reformatDatabaseForSearching = async (_knex, Logger) => {
 
   const { 'count(`id`)': totalRows } = await _knex('ips').count('id').first();
 
-  Logger.trace(`Total Records to Process: ${totalRows}`);
+  Logger.trace(`Beginning to Process Records. Total Records to Process: ${totalRows}`);
   let count = 0;
   while (count < totalRows) {
     count = await reformatDatabaseChunk(count, totalRows, _knex, Logger);
@@ -93,7 +93,7 @@ const reformatDatabaseForSearching = async (_knex, Logger) => {
   Logger.info('Finished Reformatting Database for Searching');
 
   return totalRows;
-};
+};;
 
 const createSchema = async (_knex, Logger) => {
   await _knex.raw('PRAGMA journal_mode=OFF');
@@ -102,14 +102,15 @@ const createSchema = async (_knex, Logger) => {
   const dataTableHasContent =
     dataTableExists && (await _knex.raw('SELECT ip FROM data LIMIT 2')).length;
   if (dataTableExists && dataTableHasContent) {
-    await _knex.raw(SQL_DROP_TABLE('ips'));
-    await _knex.raw(SQL_CREATE_IPS_TABLE);
-    
     Logger.info('Starting upload to newly formatted IP Address Table');
     try {
+      setLocalStorageProperty('dataHasBeenLoadedIntoIpsTable', false);
+      await _knex.raw(SQL_DROP_TABLE('ips'));
+      await _knex.raw(SQL_CREATE_IPS_TABLE);
       await _knex.raw(SQL_ADD_DATA_TO_IPS);
       Logger.info('Finished uploading to new IP Address Table. Deleting unformatted Data Table.');
       await _knex.raw(SQL_DROP_TABLE('data'));
+      setLocalStorageProperty('dataHasBeenLoadedIntoIpsTable', true);
     } catch (error) {
       Logger.error(error, 'Error on IP Table Insert');
       throw error;
@@ -125,9 +126,10 @@ const createSchema = async (_knex, Logger) => {
 };
 
 const reformatDatabaseChunk = async (counter, totalRows, _knex, Logger) => {
-  const { fullDomainNamesWithIpIds, rowBatchSize } = await getFullDomainNamesWithIpIds(
+  let { fullDomainNamesWithIpIds, rowBatchSize } = await getFullDomainNamesWithIpIds(
     counter,
-    _knex
+    _knex,
+    Logger
   );
 
   Logger.trace(`Reformatting ${rowBatchSize} records at position ${counter}.`);
@@ -147,12 +149,14 @@ const reformatDatabaseChunk = async (counter, totalRows, _knex, Logger) => {
 };
 
 
-const getFullDomainNamesWithIpIds = async (counter, _knex) => {
+const getFullDomainNamesWithIpIds = async (counter, _knex, Logger) => {
   let fullDomainNamesWithIpIds = { length: MAX_HOSTNAME_BATCH_SIZE + 1 },
     rowBatchSize =
       DEFAULT_ROW_BATCH_SIZE +
       DEFAULT_ROW_BATCH_SIZE * 0.2 +
-      DEFAULT_ROW_BATCH_SIZE * 0.05;
+      DEFAULT_ROW_BATCH_SIZE * 0.05,
+    batchSizeMaxAndHostnameSizeAcceptable,
+    hostnameSizeInCorrectRange;
 
   if (_newBatchSizeForPrimaryDomainLessening) {
     rowBatchSize = _newBatchSizeForPrimaryDomainLessening;
@@ -161,14 +165,6 @@ const getFullDomainNamesWithIpIds = async (counter, _knex) => {
     );
     _newBatchSizeForPrimaryDomainLessening = 0;
   } else {
-    const batchSizeMaxAndHostnameSizeAcceptable =
-      rowBatchSize === MAX_ROW_BATCH_SIZE &&
-      fullDomainNamesWithIpIds.length <= MAX_HOSTNAME_BATCH_SIZE;
-
-    const hostnameSizeInCorrectRange =
-      fullDomainNamesWithIpIds.length >= MIN_HOSTNAME_BATCH_SIZE &&
-      fullDomainNamesWithIpIds.length <= MAX_HOSTNAME_BATCH_SIZE;
-
     while (!batchSizeMaxAndHostnameSizeAcceptable && !hostnameSizeInCorrectRange) {
       rowBatchSize =
         fullDomainNamesWithIpIds.length > MAX_HOSTNAME_BATCH_SIZE
@@ -179,6 +175,14 @@ const getFullDomainNamesWithIpIds = async (counter, _knex) => {
       fullDomainNamesWithIpIds = await _knex.raw(
         SQL_SPLIT_HOSTNAME_COLUMN(rowBatchSize, counter)
       );
+
+      batchSizeMaxAndHostnameSizeAcceptable =
+        rowBatchSize === MAX_ROW_BATCH_SIZE &&
+        fullDomainNamesWithIpIds.length <= MAX_HOSTNAME_BATCH_SIZE;
+
+      hostnameSizeInCorrectRange =
+        fullDomainNamesWithIpIds.length >= MIN_HOSTNAME_BATCH_SIZE &&
+        fullDomainNamesWithIpIds.length <= MAX_HOSTNAME_BATCH_SIZE;
     }
   }
 

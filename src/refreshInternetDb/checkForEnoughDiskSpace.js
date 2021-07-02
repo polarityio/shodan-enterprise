@@ -8,6 +8,7 @@ const {
   FINAL_DB_DECOMPRESSION_FILEPATH,
   TEMP_DB_DECOMPRESSION_FILEPATH
 } = require('../constants');
+const { getLocalStorageProperty } = require('./localStorage');
 
 const checkForEnoughDiskSpace = async (Logger) => {
   const freeDiskSpace = fp.get('free', await checkDiskSpace('/'));
@@ -18,13 +19,18 @@ const checkForEnoughDiskSpace = async (Logger) => {
     getFileSizeInGB(TEMP_DB_DECOMPRESSION_FILEPATH) ||
     getFileSizeInGB(FINAL_DB_DECOMPRESSION_FILEPATH);
   
-  
+  const dataHasBeenLoadedIntoIpsTable =
+      getLocalStorageProperty('dataHasBeenLoadedIntoIpsTable');
+
   if (databaseFileSize) {
     databaseFileSize = Math.floor((databaseFileSize + 0.01) * 1073741824);
-    minimumDiskSpaceNeeded = Math.max(minimumDiskSpaceNeeded, databaseFileSize * 2.1);
+    minimumDiskSpaceNeeded = dataHasBeenLoadedIntoIpsTable
+      ? databaseFileSize * 1.3
+      : Math.max(minimumDiskSpaceNeeded, databaseFileSize * 2.1);
   }
 
-  if (config.minimizeEndDatabaseSize) minimumDiskSpaceNeeded *= 2;
+  if (config.minimizeEndDatabaseSize && !dataHasBeenLoadedIntoIpsTable)
+    minimumDiskSpaceNeeded *= 2;
 
   minimumDiskSpaceNeeded -= databaseFileSize;
 
