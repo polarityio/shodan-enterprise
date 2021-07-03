@@ -3,7 +3,10 @@ const config = require('../../config/config');
 const { getLocalStorageProperty } = require('./localStorage');
 
 const { getFileSizeInGB } = require('../dataTransformations');
-const { FINAL_DB_DECOMPRESSION_FILEPATH, SQL_CREATE_INDICES_IF_NOT_EXISTS } = require('../constants');
+const {
+  FINAL_DB_DECOMPRESSION_FILEPATH,
+  SQL_CREATE_INDICES_IF_NOT_EXISTS
+} = require('../constants');
 
 
 const shouldntRunDbRefresh = async (knex, setKnex, Logger) => {
@@ -38,7 +41,10 @@ const shouldntRunDbRefresh = async (knex, setKnex, Logger) => {
       return false;
     }
 
-    await _knex.raw(SQL_CREATE_INDICES_IF_NOT_EXISTS);
+    Logger.trace('Tables Loaded In.  Adding indexes if needed.')
+    for (let i = 0; i < SQL_CREATE_INDICES_IF_NOT_EXISTS.length; i++) {
+      await _knex.raw(SQL_CREATE_INDICES_IF_NOT_EXISTS[i])
+    }
 
     setKnex(_knex);
     

@@ -87,7 +87,9 @@ const reformatDatabaseForSearching = async (_knex, Logger) => {
 
   if (config.minimizeEndDatabaseSize) await _knex.raw('VACUUM;');
 
-  await _knex.raw(SQL_CREATE_INDICES_IF_NOT_EXISTS);
+  for (let i = 0; i < SQL_CREATE_INDICES_IF_NOT_EXISTS.length; i++) {
+    await _knex.raw(SQL_CREATE_INDICES_IF_NOT_EXISTS[i]);
+  }
 
   setLocalStorageProperty('databaseReformatted', true);
 
