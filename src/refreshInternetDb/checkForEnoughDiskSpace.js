@@ -13,25 +13,27 @@ const { getLocalStorageProperty } = require('./localStorage');
 const checkForEnoughDiskSpace = async (Logger) => {
   const freeDiskSpace = fp.get('free', await checkDiskSpace('/'));
 
-  let minimumDiskSpaceNeeded = 46000000000;
+  //Guestimate to start ~42GBs
+  let minimumDiskSpaceNeeded = 45000000000;
   
   let databaseFileSize =
-    getFileSizeInGB(TEMP_DB_DECOMPRESSION_FILEPATH) ||
-    getFileSizeInGB(FINAL_DB_DECOMPRESSION_FILEPATH);
+  getFileSizeInGB(TEMP_DB_DECOMPRESSION_FILEPATH) ||
+  getFileSizeInGB(FINAL_DB_DECOMPRESSION_FILEPATH);
   
   const dataHasBeenLoadedIntoIpsTable =
-      getLocalStorageProperty('dataHasBeenLoadedIntoIpsTable');
-
+  getLocalStorageProperty('dataHasBeenLoadedIntoIpsTable');
+  
   if (databaseFileSize) {
-    databaseFileSize = Math.floor((databaseFileSize + 0.01) * 1073741824);
+    //Make guestimate proportional to file size
+    databaseFileSize = databaseFileSize * 1000000000;
     minimumDiskSpaceNeeded = dataHasBeenLoadedIntoIpsTable
-      ? databaseFileSize * 1.3
-      : Math.max(minimumDiskSpaceNeeded, databaseFileSize * 2.1);
+    ? databaseFileSize * 1.3
+    : databaseFileSize * 2.05;
   }
 
   if (config.minimizeEndDatabaseSize && !dataHasBeenLoadedIntoIpsTable)
-    minimumDiskSpaceNeeded *= 2;
-
+    minimumDiskSpaceNeeded *= 1.6;
+  
   minimumDiskSpaceNeeded -= databaseFileSize;
 
   const thereIsNotEnoughDiskSpace = freeDiskSpace < minimumDiskSpaceNeeded;
