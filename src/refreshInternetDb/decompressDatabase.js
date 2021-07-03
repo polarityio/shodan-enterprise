@@ -4,7 +4,7 @@ const exec = util.promisify(require('child_process').exec);
 
 const { lessStorageMoreDowntime } = require('../../config/config');
 const { getFileSizeInGB } = require('../dataTransformations');
-const { setLocalStorageProperty } = require('./localStorage');
+const { getLocalStorageProperty, setLocalStorageProperty } = require('./localStorage');
 
 const {
   COMPRESSED_DB_FILEPATH,
@@ -65,16 +65,21 @@ const decompressDatabase = async (knex, setKnex, Logger) => {
   }
 };
 
-const decompressPreformattedDatabase = (knex, setKnex, Logger) => {
+const decompressPreformattedDatabase = async (Logger) => {
   try {
     Logger.trace(
       'Starting Preformatted Database Decompression. This could take a few minutes'
     );
 
-    const compressedFileExists = fs.existsSync(COMPRESSED_DB_FILEPATH);
+    const preformattedCompressedDbPath = './data/internetdb.sqlite.bz2';
+    const compressedFileExists = fs.existsSync(preformattedCompressedDbPath);
     const formattedDatabaseExists = fs.existsSync(FINAL_DB_DECOMPRESSION_FILEPATH);
 
-    if (formattedDatabaseExists && !compressedFileExists) {
+    if (
+      formattedDatabaseExists &&
+      !compressedFileExists &&
+      getLocalStorageProperty('databaseReformatted')
+    ) {
       Logger.info('Preformatted Database already decompressed.');
       return;
     }
@@ -88,25 +93,25 @@ const decompressPreformattedDatabase = (knex, setKnex, Logger) => {
 
     if (!compressedFileExists) {
       throw Error(
-        `Compress Preformatted Database File Not Found -> Make sure file is located at ${COMPRESSED_DB_FILEPATH}`
+        `Compress Preformatted Database File Not Found -> Make sure file is located at ${preformattedCompressedDbPath}`
       );
     }
 
     const { stdout: databaseDecompressionMessage, stderr } = await exec(
-      `bzip2 -dc1 ${COMPRESSED_DB_FILEPATH} > ${FINAL_DB_DECOMPRESSION_FILEPATH}`
+      `bzip2 -dc1 ${preformattedCompressedDbPath} > ${FINAL_DB_DECOMPRESSION_FILEPATH}`
     );
 
     if (stderr) {
       throw new Error(`Database Decompression Failed -> ${stderr}`);
     }
 
-    if (!compressedFileExists) {
-      fs.unlinkSync(COMPRESSED_DB_FILEPATH);
+    if (compressedFileExists) {
+      fs.unlinkSync(preformattedCompressedDbPath);
     }
 
     setLocalStorageProperty('databaseReformatted', true);
 
-    const databaseFileSize = getFileSizeInGB(decompressionFilePath);
+    const databaseFileSize = getFileSizeInGB(FINAL_DB_DECOMPRESSION_FILEPATH);
 
     Logger.info(
       databaseDecompressionMessage ? { databaseDecompressionMessage } : '',

@@ -24,15 +24,13 @@ const refreshInternetDb =
     Logger.info('Starting Getting Database');
     const startTime = new Date();
 
-    if (config.usePreformattedDatabase)
-      await decompressPreformattedDatabase(knex, setKnex, Logger);
+    if (config.usePreformattedDatabase) await decompressPreformattedDatabase(Logger);
 
     if(await shouldntRunDbRefresh(knex, setKnex, Logger)) {
-      Logger.info('Finished Getting Database');
       const endTime = new Date();
       const loadTime = millisToHoursMinutesAndSeconds(endTime - startTime);
       
-      Logger.info(`Refreshing Database Complete. Load Time: ${loadTime}`);
+      Logger.info(`Finished Getting Database. Load Time: ${loadTime}`);
       return;
     }
 
