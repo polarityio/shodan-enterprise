@@ -4,6 +4,7 @@ const exec = util.promisify(require('child_process').exec);
 
 const { lessStorageMoreDowntime } = require('../../config/config');
 const { getFileSizeInGB } = require('../dataTransformations');
+const { setLocalStorageProperty } = require('./localStorage');
 
 const {
   COMPRESSED_DB_FILEPATH,
@@ -11,11 +12,7 @@ const {
   FINAL_DB_DECOMPRESSION_FILEPATH
 } = require('../constants');
 
-const decompressDatabase = async (
-  knex,
-  setKnex,
-  Logger
-) => {
+const decompressDatabase = async (knex, setKnex, Logger) => {
   try {
     Logger.trace('Starting Database Decompression');
 
@@ -68,4 +65,62 @@ const decompressDatabase = async (
   }
 };
 
-module.exports = decompressDatabase;
+const decompressPreformattedDatabase = (knex, setKnex, Logger) => {
+  try {
+    Logger.trace(
+      'Starting Preformatted Database Decompression. This could take a few minutes'
+    );
+
+    const compressedFileExists = fs.existsSync(COMPRESSED_DB_FILEPATH);
+    const formattedDatabaseExists = fs.existsSync(FINAL_DB_DECOMPRESSION_FILEPATH);
+
+    if (formattedDatabaseExists && !compressedFileExists) {
+      Logger.info('Preformatted Database already decompressed.');
+      return;
+    }
+
+    if (fs.existsSync(TEMP_DB_DECOMPRESSION_FILEPATH)) {
+      fs.unlinkSync(TEMP_DB_DECOMPRESSION_FILEPATH);
+    }
+    if (formattedDatabaseExists) {
+      fs.unlinkSync(FINAL_DB_DECOMPRESSION_FILEPATH);
+    }
+
+    if (!compressedFileExists) {
+      throw Error(
+        `Compress Preformatted Database File Not Found -> Make sure file is located at ${COMPRESSED_DB_FILEPATH}`
+      );
+    }
+
+    const { stdout: databaseDecompressionMessage, stderr } = await exec(
+      `bzip2 -dc1 ${COMPRESSED_DB_FILEPATH} > ${FINAL_DB_DECOMPRESSION_FILEPATH}`
+    );
+
+    if (stderr) {
+      throw new Error(`Database Decompression Failed -> ${stderr}`);
+    }
+
+    if (!compressedFileExists) {
+      fs.unlinkSync(COMPRESSED_DB_FILEPATH);
+    }
+
+    setLocalStorageProperty('databaseReformatted', true);
+
+    const databaseFileSize = getFileSizeInGB(decompressionFilePath);
+
+    Logger.info(
+      databaseDecompressionMessage ? { databaseDecompressionMessage } : '',
+      `Database Decompression Complete. Database File Size: ${databaseFileSize}GB`
+    );
+  } catch (error) {
+    Logger.error(error, 'Error when Decompressing Preformatted Database File');
+    if (error.message.includes('bzip2: command not found')) {
+      throw new Error(
+        "Must run 'npm run build' on your server then restart the integration before using this integration is possible."
+      );
+    }
+    throw error;
+  }
+};
+
+module.exports = { decompressDatabase, decompressPreformattedDatabase };

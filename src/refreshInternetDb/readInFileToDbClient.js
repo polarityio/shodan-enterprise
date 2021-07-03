@@ -18,7 +18,7 @@ const {
   SQL_ADD_DATA_TO_IPS,
   SQL_CREATE_DOMAINS_TABLE,
   SQL_CREATE_IPS_DOMAINS_RELATIONAL_TABLE,
-  SQL_CREATE_INDICES
+  SQL_CREATE_INDICES_IF_NOT_EXISTS
 } = require('../constants');
 
 const { getLocalStorageProperty, setLocalStorageProperty } = require('./localStorage');
@@ -85,8 +85,9 @@ const reformatDatabaseForSearching = async (_knex, Logger) => {
     count = await reformatDatabaseChunk(count, totalRows, _knex, Logger);
   }
 
-  await _knex.raw(SQL_CREATE_INDICES);
   if (config.minimizeEndDatabaseSize) await _knex.raw('VACUUM;');
+
+  await _knex.raw(SQL_CREATE_INDICES_IF_NOT_EXISTS);
 
   setLocalStorageProperty('databaseReformatted', true);
 

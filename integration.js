@@ -2,7 +2,7 @@ const fp = require('lodash/fp');
 
 const createRequestWithDefaults = require('./src/createRequestWithDefaults');
 const schedule = require('node-schedule');
-const { shodanDataRefreshTime } = require('./config/config');
+const { shodanDataRefreshTime, usePreformattedDatabase } = require('./config/config');
 
 const { getLookupResults } = require('./src/getLookupResults');
 const refreshInternetDb = require('./src/refreshInternetDb/index');
@@ -28,7 +28,7 @@ const startup = async (logger) => {
     
     await refreshInternetDb(knex, setKnex, requestAndWithDefaults, Logger)();
 
-    if (shodanDataRefreshTime !== 'never-update') {
+    if (shodanDataRefreshTime !== 'never-update' && !usePreformattedDatabase) {
       job = schedule.scheduleJob(
         shodanDataRefreshTime,
         refreshInternetDb(knex, setKnex, requestAndWithDefaults, Logger)

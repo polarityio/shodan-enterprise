@@ -5,7 +5,10 @@ const checkForEnoughDiskSpace = require('./checkForEnoughDiskSpace');
 const getDownloadLink = require('./getDownloadLink');
 const { shouldDownloadAndDecompress } = require('./fileChecks');
 const downloadCompressedDatabase = require('./downloadCompressedDatabase');
-const decompressDatabase = require('./decompressDatabase');
+const {
+  decompressDatabase,
+  decompressPreformattedDatabase
+} = require('./decompressDatabase');
 const readInFileToDbClient = require('./readInFileToDbClient');
 const config = require('../../config/config');
 
@@ -18,11 +21,21 @@ const refreshInternetDb =
     Logger
   ) =>
   async () => {
-    Logger.info('Starting Database Refresh');
-
-    if(await shouldntRunDbRefresh(knex, setKnex, Logger)) return;
-
+    Logger.info('Starting Getting Database');
     const startTime = new Date();
+
+    if (config.usePreformattedDatabase)
+      await decompressPreformattedDatabase(knex, setKnex, Logger);
+
+    if(await shouldntRunDbRefresh(knex, setKnex, Logger)) {
+      Logger.info('Finished Getting Database');
+      const endTime = new Date();
+      const loadTime = millisToHoursMinutesAndSeconds(endTime - startTime);
+      
+      Logger.info(`Refreshing Database Complete. Load Time: ${loadTime}`);
+      return;
+    }
+
     const downloadLink = await getDownloadLink(requestWithDefaults, Logger);
 
     if (shouldDownloadAndDecompress(downloadLink)) {

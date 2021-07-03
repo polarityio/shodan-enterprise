@@ -3,7 +3,7 @@ const config = require('../../config/config');
 const { getLocalStorageProperty } = require('./localStorage');
 
 const { getFileSizeInGB } = require('../dataTransformations');
-const { FINAL_DB_DECOMPRESSION_FILEPATH } = require('../constants');
+const { FINAL_DB_DECOMPRESSION_FILEPATH, SQL_CREATE_INDICES_IF_NOT_EXISTS } = require('../constants');
 
 
 const shouldntRunDbRefresh = async (knex, setKnex, Logger) => {
@@ -31,14 +31,27 @@ const shouldntRunDbRefresh = async (knex, setKnex, Logger) => {
       (await tableExistsAndHasContent(_knex, 'domains')) &&
       (await tableExistsAndHasContent(_knex, 'ips_domains'));
 
-    if (!allNeededTablesExist) return false;
+    if (!allNeededTablesExist) {
+      if (config.usePreformattedDatabase) {
+        throw Error("Database exists, but doesn't contain required data");
+      }
+      return false;
+    }
+
+    await _knex.raw(SQL_CREATE_INDICES_IF_NOT_EXISTS);
 
     setKnex(_knex);
     
     const userSetNeverUpdate = config.shodanDataRefreshTime === 'never-update';
 
-    return userSetNeverUpdate;
+    return userSetNeverUpdate || config.usePreformattedDatabase;
+  } else if (config.usePreformattedDatabase) {
+    throw Error(
+      'Something Wrong with Decompressed Preformatted Database. ' +
+      'Try running `npm run reset-database`, redownloading your preformatted compressed database, and restart.'
+    );
   }
+
   return false;
 };
 

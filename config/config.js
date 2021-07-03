@@ -88,5 +88,18 @@ module.exports = {
    *  reformatting process will almost half the amount of storage required for the
    *  database file (from ~45GBs to ~27GBs) and improve search speeds slightly.
    */
-  minimizeEndDatabaseSize: true
+  minimizeEndDatabaseSize: true,
+  /**
+   * Use Preformatted Database:
+   *  If true, this setting will allow you to manually download a Pre Formatted
+   *  internetdb.sqlite.bz2 database file into the `./data` folder, and the integration
+   *  will decompress the database, and give you access to the internetdb data source
+   *  without the formatting process.
+   *
+   *  If true, this setting will also prevent the data source from updating regardless of
+   *  what time you put for the `shodanDataRefreshTime` setting
+   *
+   *  Note: The compressed database file must be in the `./data` folder and be named `internetdb.sqlite.bz2`
+   */
+  usePreformattedDatabase: false
 };

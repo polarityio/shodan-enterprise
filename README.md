@@ -46,8 +46,15 @@ If true, this setting will half the total data storage requirements during the R
 
 This being set to true, however, will make the integration no longer work for the entire database download and decompression time which could possibly be more than 30 minutes. If you set this to true, we would recommend you set your 'Shodan Data Refresh Time' config property to a time of the day where users are not typically using the integration.
 
-### Minimize End Database Size:
+### **Minimize End Database Size**:
 If true, this setting will double the total data storage requirements during the database reformatting process (from ~45GBs upwards to ~90+GBs), but after the reformatting process will  half the amount of storage required for the database file (from ~45GBs to ~27GBs) and improve search speeds slightly. 
+
+### **Use Preformatted Database**:
+If true, this setting will allow you to manually download a Pre Formatted internetdb.sqlite.bz2 database file into the `./data` folder, and the integration will decompress the database, and give you access to the internetdb data source without the formatting process.
+
+If true, this setting will also prevent the data source from updating regardless of what time you put for the `shodanDataRefreshTime` setting.
+
+> ***Note***: The compressed database file must be in the `./data` folder and be named `internetdb.sqlite.bz2`
 
 
 ## Installation Instructions

@@ -31,9 +31,9 @@ const SQL_CREATE_DOMAINS_TABLE =
 const SQL_CREATE_IPS_DOMAINS_RELATIONAL_TABLE =
   'CREATE TABLE ips_domains (ip_id INTEGER, domain_id INTEGER, FOREIGN KEY(ip_id) REFERENCES ips(id), FOREIGN KEY(domain_id) REFERENCES domains(id));';
 
-const SQL_CREATE_INDICES = 
-`CREATE INDEX IF NOT EXISTS ips_ip_index ON ips (ip);
-  CREATE INDEX IF NOT EXISTS domains_domain_index ON domains (domain);
+const SQL_CREATE_INDICES_IF_NOT_EXISTS = 
+`CREATE UNIQUE INDEX IF NOT EXISTS ips_ip_index ON ips (ip);
+  CREATE UNIQUE INDEX IF NOT EXISTS domains_domain_index ON domains (domain);
   CREATE INDEX IF NOT EXISTS ips_domains_ip_id_index ON ips_domains (ip_id);
   CREATE INDEX IF NOT EXISTS ips_domains_domain_id_index ON ips_domains (domain_id);`;
 
@@ -54,5 +54,5 @@ module.exports = {
   SQL_ADD_DATA_TO_IPS,
   SQL_CREATE_DOMAINS_TABLE,
   SQL_CREATE_IPS_DOMAINS_RELATIONAL_TABLE,
-  SQL_CREATE_INDICES
+  SQL_CREATE_INDICES_IF_NOT_EXISTS
 };
