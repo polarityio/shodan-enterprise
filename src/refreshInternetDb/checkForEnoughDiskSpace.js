@@ -27,12 +27,12 @@ const checkForEnoughDiskSpace = async (Logger) => {
     //Make guestimate proportional to file size
     databaseFileSize = databaseFileSize * 1000000000;
     minimumDiskSpaceNeeded = dataHasBeenLoadedIntoIpsTable
-    ? databaseFileSize * 1.3
+    ? databaseFileSize * 1.25
     : databaseFileSize * 2.05;
   }
 
   if (config.minimizeEndDatabaseSize && !dataHasBeenLoadedIntoIpsTable)
-    minimumDiskSpaceNeeded *= 1.6;
+    minimumDiskSpaceNeeded *= 2;
   
   minimumDiskSpaceNeeded -= databaseFileSize;
 

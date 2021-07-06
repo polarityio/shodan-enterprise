@@ -40,9 +40,7 @@ const readInFileToDbClient = async (knex, setKnex, Logger) => {
   const numberOfDatabaseRecords = await reformatDatabaseForSearching(_knex, Logger);
 
   if (!config.lessStorageMoreDowntime) {
-    Logger.info(
-      'Deleting Old Database. Searching will be disabled for a moment.'
-    );
+    Logger.info('Deleting Old Database. Searching will be disabled for a moment.');
 
     if (knex && knex.destroy) {
       setKnex(undefined);
@@ -65,7 +63,9 @@ const readInFileToDbClient = async (knex, setKnex, Logger) => {
 
   Logger.info(
     'Loaded in Database. Searching is now Enabled.' +
-      (databaseFileSize ? ` Database File Size After Indexing ${databaseFileSize}GB.` : '') +
+      (databaseFileSize
+        ? ` Database File Size After Indexing ${databaseFileSize}GB.`
+        : '') +
       (numberOfDatabaseRecords ? ` ${numberOfDatabaseRecords} Records Found.` : '')
   );
 };
@@ -73,30 +73,42 @@ const readInFileToDbClient = async (knex, setKnex, Logger) => {
 const reformatDatabaseForSearching = async (_knex, Logger) => {
   if (getLocalStorageProperty('databaseReformatted')) return;
 
-  Logger.info('Reformatting Database for Searching. This will take at least 4 hours.');
+  try {
+    Logger.info('Reformatting Database for Searching. This will take at least 4 hours.');
 
-  await createSchema(_knex, Logger);
+    await createSchema(_knex, Logger);
 
-  const { 'count(`id`)': totalRows } = await _knex('ips').count('id').first();
+    const { 'count(`id`)': totalRows } = await _knex('ips').count('id').first();
 
-  Logger.trace(`Beginning to Process Records. Total Records to Process: ${totalRows}`);
-  let count = 0;
-  while (count < totalRows) {
-    count = await reformatDatabaseChunk(count, totalRows, _knex, Logger);
+    Logger.trace(`Beginning to Process Records. Total Records to Process: ${totalRows}`);
+    let count = 0;
+    while (count < totalRows) {
+      count = await reformatDatabaseChunk(count, totalRows, _knex, Logger);
+    }
+
+    Logger.trace('Finished creating data. Running storage cleanup.');
+    if (config.minimizeEndDatabaseSize) await _knex.raw('VACUUM;');
+
+    Logger.trace('Finished storage cleanup. Running indexing.');
+    for (let i = 0; i < SQL_CREATE_INDICES_IF_NOT_EXISTS.length; i++) {
+      await _knex.raw(SQL_CREATE_INDICES_IF_NOT_EXISTS[i]);
+    }
+
+    setLocalStorageProperty('databaseReformatted', true);
+
+    Logger.info('Finished Reformatting Database for Searching');
+
+    return totalRows;
+  } catch (error) {
+    Logger.error(error, 'Error when Reformating Database For Searching');
+    if (error.message.includes('Knex: Timeout acquiring a connection.')) {
+      throw new Error(
+        "SQLite's connection has just failed.  This can usually be fixed by lowering the MAX_HOSTNAME_BATCH_SIZE variable value in ./src/constants.js ln 9."
+      );
+    }
+    throw error;
   }
-
-  if (config.minimizeEndDatabaseSize) await _knex.raw('VACUUM;');
-
-  for (let i = 0; i < SQL_CREATE_INDICES_IF_NOT_EXISTS.length; i++) {
-    await _knex.raw(SQL_CREATE_INDICES_IF_NOT_EXISTS[i]);
-  }
-
-  setLocalStorageProperty('databaseReformatted', true);
-
-  Logger.info('Finished Reformatting Database for Searching');
-
-  return totalRows;
-};;
+};
 
 const createSchema = async (_knex, Logger) => {
   await _knex.raw('PRAGMA journal_mode=OFF');
@@ -111,7 +123,9 @@ const createSchema = async (_knex, Logger) => {
       await _knex.raw(SQL_DROP_TABLE('ips'));
       await _knex.raw(SQL_CREATE_IPS_TABLE);
       await _knex.raw(SQL_ADD_DATA_TO_IPS);
-      Logger.info('Finished uploading to new IP Address Table. Deleting unformatted Data Table.');
+      Logger.info(
+        'Finished uploading to new IP Address Table. Deleting unformatted Data Table.'
+      );
       await _knex.raw(SQL_DROP_TABLE('data'));
       setLocalStorageProperty('dataHasBeenLoadedIntoIpsTable', true);
     } catch (error) {
@@ -129,30 +143,55 @@ const createSchema = async (_knex, Logger) => {
 };
 
 const reformatDatabaseChunk = async (counter, totalRows, _knex, Logger) => {
-  let { fullDomainNamesWithIpIds, rowBatchSize } = await getFullDomainNamesWithIpIds(
-    counter,
-    _knex,
-    Logger
-  );
+  try {
+    let { fullDomainNamesWithIpIds, rowBatchSize } = await getFullDomainNamesWithIpIds(
+      counter,
+      totalRows,
+      _knex,
+      Logger
+    );
 
-  Logger.trace(`Reformatting ${rowBatchSize} records at position ${counter}.`);
+    Logger.trace(`Reformatting ${rowBatchSize} records at position ${counter}.`);
 
-  let primaryDomainByIpIds = getPrimaryDomainByIpIds(fullDomainNamesWithIpIds);  
-  fullDomainNamesWithIpIds = null;
+    let primaryDomainByIpIds = getPrimaryDomainByIpIds(fullDomainNamesWithIpIds);
+    Logger.debug(`fullDomainNamesWithIpIds: ${fullDomainNamesWithIpIds.length}`);
+    fullDomainNamesWithIpIds = null;
 
-  if (Object.keys(primaryDomainByIpIds).length > MAX_PRIMARY_DOMAINS) {
-    _newBatchSizeForPrimaryDomainLessening = Math.round(rowBatchSize - rowBatchSize * 0.3); 
-    return counter;
+    if (Object.keys(primaryDomainByIpIds).length > MAX_PRIMARY_DOMAINS) {
+      _newBatchSizeForPrimaryDomainLessening = Math.round(
+        rowBatchSize - rowBatchSize * 0.3
+      );
+      return counter;
+    }
+    Logger.debug(`primaryDomainByIpIds: ${Object.keys(primaryDomainByIpIds).length}`);
+
+    await insertPrimaryDomainsAndRelationships(primaryDomainByIpIds, _knex);
+    primaryDomainByIpIds = null;
+
+    return Math.min(counter + rowBatchSize, totalRows);
+  } catch (error) {
+    Logger.error(error, 'Error when Reformating Database For Searching');
+    if (error.message.includes('Knex: Timeout acquiring a connection.')) {
+      Logger.debug('SQlite had a timeout error. Trying to wait until connection is restored.');
+
+      let stillTimedOut = true
+      while (stillTimedOut) {
+        try {
+          await _knex.select('*').from('ips').limit(2);
+          stillTimedOut = false
+        } catch (error) {
+          if (!error.message.includes('Knex: Timeout acquiring a connection.')) {
+            throw error;
+          }
+        }
+      }
+      return counter;
+    }
+    throw error;
   }
-
-  await insertPrimaryDomainsAndRelationships(primaryDomainByIpIds, _knex);
-  primaryDomainByIpIds = null;
-  
-  return Math.min(counter + rowBatchSize, totalRows);
 };
 
-
-const getFullDomainNamesWithIpIds = async (counter, _knex, Logger) => {
+const getFullDomainNamesWithIpIds = async (counter, totalRows, _knex, Logger) => {
   let fullDomainNamesWithIpIds = { length: MAX_HOSTNAME_BATCH_SIZE + 1 },
     rowBatchSize =
       DEFAULT_ROW_BATCH_SIZE +
@@ -180,7 +219,7 @@ const getFullDomainNamesWithIpIds = async (counter, _knex, Logger) => {
       );
 
       batchSizeMaxAndHostnameSizeAcceptable =
-        rowBatchSize === MAX_ROW_BATCH_SIZE &&
+        (rowBatchSize === MAX_ROW_BATCH_SIZE || rowBatchSize + counter >= totalRows) &&
         fullDomainNamesWithIpIds.length <= MAX_HOSTNAME_BATCH_SIZE;
 
       hostnameSizeInCorrectRange =
