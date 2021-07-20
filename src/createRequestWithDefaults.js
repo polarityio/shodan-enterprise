@@ -1,9 +1,7 @@
 const fs = require('fs');
-const fp = require('lodash/fp');
 const request = require('request');
 const config = require('../config/config');
 
-const { checkForInternalServiceError } = require('./handleError');
 
 const _configFieldIsValid = (field) => typeof field === 'string' && field.length > 0;
 
@@ -19,7 +17,6 @@ const createRequestWithDefaults = (Logger) => {
     ...(_configFieldIsValid(passphrase) && { passphrase }),
     ...(_configFieldIsValid(proxy) && { proxy }),
     ...(typeof rejectUnauthorized === 'boolean' && { rejectUnauthorized }),
-    json: true
   };
 
   const requestWithDefaults = (
@@ -67,7 +64,7 @@ const createRequestWithDefaults = (Logger) => {
 
   const checkForStatusError = ({ statusCode, body }, requestOptions) => {
     Logger.trace({ statusCode, body, requestOptions });
-    checkForInternalServiceError(statusCode, body);
+    
     const roundedStatus = Math.round(statusCode / 100) * 100;
     if (![200].includes(roundedStatus)) {
       const requestError = Error('Request Error');
@@ -80,7 +77,7 @@ const createRequestWithDefaults = (Logger) => {
 
   const requestDefaultsWithInterceptors = requestWithDefaults();
 
-  return requestDefaultsWithInterceptors;
+  return { requestWithDefaults: requestDefaultsWithInterceptors, requestDefaults: defaults };
 };
 
 module.exports = createRequestWithDefaults;
