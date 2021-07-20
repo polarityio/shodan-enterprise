@@ -5,8 +5,16 @@
   "private": true,
   "license": "MIT",
   "author": "Polarity",
+  "scripts": {
+    "build": "rm ./data/* && yum install bzip2",
+    "reset-database": "rm ./data/*"
+  },
   "dependencies": {
+    "knex": "^0.95.6",
     "lodash": "^4.17.19",
-    "request": "^2.88.2"
+    "node-schedule": "^2.0.0",
+    "request": "^2.88.2",
+    "sqlite3": "^5.0.2",
+    "check-disk-space": "^3.0.1"
   }
 }
