@@ -1,0 +1,50 @@
+{
+  "name": "Shodan Enterprise",
+  "acronym": "SHO-E",
+  "description": "Polarity's Shodan Enterprise Integration gives users access to the Shodan data/internetdb endpoint data containing network information about virtually all IPs on the Internet.",
+  "entityTypes": [
+    "IPv4",
+    "IPv6",
+    "domain"
+  ],
+  "styles": [
+    "./styles/styles.less"
+  ],
+  "defaultColor": "light-pink",
+  "onDemandOnly": false,
+  "block": {
+    "component": {
+      "file": "./components/block.js"
+    },
+    "template": {
+      "file": "./templates/block.hbs"
+    }
+  },
+  "request": {
+    "cert": "",
+    "key": "",
+    "passphrase": "",
+    "ca": "",
+    "proxy": "",
+    "rejectUnauthorized": true
+  },
+  "logging": {
+    "level": "info"
+  },
+  "options": [
+    {
+      "key": "maxResults",
+      "name": "Max Number Of Results",
+      "description": "The maximum number of results we will return from the internetdb data set when you search.",
+      "default": 30,
+      "type": "number",
+      "userCanEdit": true,
+      "adminOnly": false
+    }
+  ],
+  "shodanEnterpriseApiKey": "",
+  "shodanDataRefreshTime": "0 0 1 * *",
+  "lessStorageMoreDowntime": true,
+  "minimizeEndDatabaseSize": true,
+  "usePreformattedDatabase": false
+}
