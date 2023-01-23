@@ -1,7 +1,7 @@
 {
-  "main": "./integration.js",
   "name": "shodan-enterprise",
-  "version": "3.0.0-beta",
+  "version": "3.0.1-beta",
+  "main": "./integration.js",
   "private": true,
   "license": "MIT",
   "author": "Polarity",
@@ -10,11 +10,11 @@
     "reset-database": "rm ./data/*"
   },
   "dependencies": {
+    "check-disk-space": "^3.0.1",
     "knex": "^0.95.6",
     "lodash": "^4.17.19",
     "node-schedule": "^2.0.0",
-    "request": "^2.88.2",
-    "sqlite3": "^5.0.2",
-    "check-disk-space": "^3.0.1"
+    "postman-request": "^2.88.1-postman.31",
+    "sqlite3": "^5.0.2"
   }
 }
