@@ -1,5 +1,5 @@
 const fs = require('fs');
-const request = require('request');
+const request = require('postman-request');
 const config = require('../config/config');
 
 

@@ -1,5 +1,5 @@
 const fs = require('fs');
-const request = require('request');
+const request = require('postman-request');
 
 const { COMPRESSED_DB_FILEPATH } = require('../constants');
 const { getFileSizeInGB } = require('../dataTransformations');
