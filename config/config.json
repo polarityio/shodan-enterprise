@@ -1,4 +1,5 @@
 {
+  "polarityIntegrationUuid": "f31a04f0-cce1-11ed-aeee-075d3490155d",
   "name": "Shodan Enterprise",
   "acronym": "SHO-E",
   "description": "Polarity's Shodan Enterprise Integration gives users access to the Shodan data/internetdb endpoint data containing network information about virtually all IPs on the Internet.",
