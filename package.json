@@ -1,6 +1,6 @@
 {
   "name": "shodan-enterprise",
-  "version": "3.0.2-beta",
+  "version": "3.0.2",
   "main": "./integration.js",
   "private": true,
   "license": "MIT",
