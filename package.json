@@ -10,7 +10,7 @@
     "reset-database": "rm ./data/*"
   },
   "dependencies": {
-    "check-disk-space": "^3.0.1",
+    "check-disk-space": "^3.4.0",
     "knex": "^0.95.6",
     "lodash": "^4.17.19",
     "node-schedule": "^2.0.0",
